@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -187,34 +188,45 @@ fun PixelTile(
     val pressed by interaction.collectIsPressedAsState()
     val haptics = LocalHapticFeedback.current
     val container by animateColorAsState(
-        if (enabled) accent.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+        if (enabled) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh,
         label = "tileBg",
     )
-    Column(
+    val iconBg by animateColorAsState(
+        if (enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+        label = "iconBg"
+    )
+    val iconColor by animateColorAsState(
+        if (enabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "iconColor"
+    )
+    Row(
         modifier
             .pressSquash(pressed, min = 0.94f)
-            // clip first: an unclipped ripple paints a rectangle outside the tile's rounded shape
-            .clip(MaterialTheme.shapes.medium)
+            .clip(MaterialTheme.shapes.large)
             .background(container)
             .clickable(interactionSource = interaction, indication = ripple()) {
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 onClick()
             }
-            .padding(vertical = 14.dp, horizontal = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = if (enabled) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(iconBg, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
+        }
         Text(
             label,
-            style = MaterialTheme.typography.labelLarge,
-            textAlign = TextAlign.Center,
-            color = if (enabled) MaterialTheme.colorScheme.onSurface
-            else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.titleSmall,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
         )
     }
 }
@@ -228,24 +240,32 @@ fun PixelToggleRow(
     onChange: (Boolean) -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier
+            .fillMaxWidth()
+            .pressSquash(pressed, min = 0.98f)
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(interactionSource = interaction, indication = ripple()) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onChange(!checked)
+            }
+            .padding(vertical = 12.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.fillMaxWidth(0.72f)) {
+        Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             if (subtitle != null) {
                 Spacer(Modifier.height(2.dp))
                 Caption(subtitle)
             }
         }
+        Spacer(Modifier.width(16.dp))
         Switch(
             checked = checked,
-            onCheckedChange = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onChange(it)
-            },
+            onCheckedChange = null,
         )
     }
 }
@@ -253,18 +273,26 @@ fun PixelToggleRow(
 @Composable
 fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val haptics = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     Row(
-        Modifier.fillMaxWidth(),
+        Modifier
+            .fillMaxWidth()
+            .pressSquash(pressed, min = 0.98f)
+            .clip(MaterialTheme.shapes.small)
+            .clickable(interactionSource = interaction, indication = ripple()) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onChange(!checked)
+            }
+            .padding(vertical = 10.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
         Switch(
             checked = checked,
-            onCheckedChange = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onChange(it)
-            },
+            onCheckedChange = null,
+            modifier = Modifier.scale(0.9f)
         )
     }
 }
@@ -460,4 +488,19 @@ fun formatDuration(ms: Int): String = when {
     // where that is what a reader expects.
     ms >= 1_000 -> stringResource(R.string.duration_seconds_fraction, "%.1f".format(ms / 1000f))
     else -> stringResource(R.string.duration_ms, ms)
+}
+
+
+
+@Composable
+fun HiLightAppIcon(
+    modifier: Modifier = Modifier,
+    size: Int = 32,
+) {
+    Icon(
+        painter = androidx.compose.ui.res.painterResource(R.drawable.ic_hilight_foreground),
+        contentDescription = "HiLight Studio Icon",
+        modifier = modifier.size(size.dp),
+        tint = Color.Unspecified
+    )
 }

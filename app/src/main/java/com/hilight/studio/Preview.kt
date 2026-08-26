@@ -26,7 +26,8 @@ object Renderer {
             Pattern.SOLID -> for (i in 0 until n) out[i] = base
             Pattern.CUSTOM -> for (i in 0 until n) out[i] = cfg.perLed[i % cfg.perLed.size]
             Pattern.GRADIENT -> for (i in 0 until n)
-                out[i] = mix(base, cfg.secondColor, i.toDouble() / (n - 1))
+                out[i] = if (cfg.perLed.size == n && cfg.perLed.distinct().size > 1) cfg.perLed[i]
+                else mix(base, cfg.secondColor, i.toDouble() / (n - 1))
 
             Pattern.BREATHE -> {
                 val phase = (t % speed) / speed.toDouble()

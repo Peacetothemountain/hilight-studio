@@ -35,7 +35,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -132,16 +132,12 @@ private fun App(store: Store) {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             // single-line bar: the hero already carries the visual weight
-            TopAppBar(
+            LargeTopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(R.drawable.hilight_logo),
-                            contentDescription = "HiLight Studio logo",
-                            modifier = Modifier.size(32.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("HiLight", style = MaterialTheme.typography.titleLarge)
+                        HiLightAppIcon(size = 32)
+                        Spacer(Modifier.width(10.dp))
+                        Text("HiLight", style = MaterialTheme.typography.headlineLarge)
                     }
                 },
                 actions = {
@@ -209,3 +205,8 @@ private fun App(store: Store) {
         }
     }
 }
+
+
+
+
+

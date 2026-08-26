@@ -1,37 +1,62 @@
 package com.hilight.studio
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Casino
+import androidx.compose.material.icons.rounded.FlashOn
 import androidx.compose.material.icons.rounded.Flare
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Nightlight
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Waves
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -182,35 +207,42 @@ fun LiveScreen(store: Store) {
         }
     }
 
-    // Each tile borrows its pattern's own name, so the label is a string resource id. Random is the
-    // exception: a third of a row is too narrow for "Random colours".
-    val tests: List<Triple<Int, ImageVector, Pair<Pattern, Int>>> = listOf(
-        Triple(Pattern.RAINBOW.shortLabelRes, Icons.Rounded.AutoAwesome, Pattern.RAINBOW to 0xFFFFFFFF.toInt()),
-        Triple(R.string.live_test_random, Icons.Rounded.Casino, Pattern.RANDOM to 0xFFFFFFFF.toInt()),
-        // tile accents are chosen for legibility; the effect colours themselves are above
-        Triple(Pattern.COMET.shortLabelRes, Icons.Rounded.Flare, Pattern.COMET to 0xFF00E5FF.toInt()),
-        Triple(Pattern.PULSE.shortLabelRes, Icons.Rounded.Bolt, Pattern.PULSE to 0xFFFF1744.toInt()),
-        Triple(Pattern.BREATHE.shortLabelRes, Icons.Rounded.Nightlight, Pattern.BREATHE to 0xFF7C4DFF.toInt()),
-        Triple(Pattern.WAVE.shortLabelRes, Icons.Rounded.Waves, Pattern.WAVE to 0xFF00E676.toInt()),
+    // Android 17 8-LED Flashlight with animated beam & color spectrum long-press
+    Android17FlashlightCard(store = store)
+
+    // Google Pixel Native Stock & Dynamic Effects
+    val tests: List<Pair<Int, ImageVector>> = listOf(
+        R.string.live_effect_assistant to Icons.Rounded.GraphicEq,
+        R.string.live_effect_timer to Icons.Rounded.Timer,
+        R.string.live_effect_camera to Icons.Rounded.CameraAlt,
+        R.string.live_effect_battery to Icons.Rounded.BatteryChargingFull,
+        R.string.live_effect_call to Icons.Rounded.Call,
+        R.string.live_effect_notify to Icons.Rounded.NotificationsActive,
+        Pattern.RAINBOW.shortLabelRes to Icons.Rounded.AutoAwesome,
+        R.string.live_effect_sunset to Icons.Rounded.WbSunny,
+        R.string.live_effect_cyber to Icons.Rounded.FlashOn,
+        R.string.live_test_random to Icons.Rounded.Casino,
+        Pattern.COMET.shortLabelRes to Icons.Rounded.Flare,
+        Pattern.WAVE.shortLabelRes to Icons.Rounded.Waves,
     )
 
     PixelCard {
         SectionTitle(stringResource(R.string.live_tests_title))
         Caption(stringResource(R.string.live_tests_caption))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            tests.chunked(3).forEach { row ->
+            tests.chunked(2).forEach { row ->
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    row.forEach { (labelRes, icon, spec) ->
+                    row.forEach { (labelRes, icon) ->
                         PixelTile(
                             label = stringResource(labelRes),
                             icon = icon,
-                            accent = tileAccent(spec.first, spec.second),
+                            accent = MaterialTheme.colorScheme.primary,
                             enabled = enabled && status.alive,
                             modifier = Modifier.weight(1f),
-                        ) { store.preview(spec.first, spec.second, 1200, 1f) }
+                        ) { store.preview(Pattern.RANDOM, 0xFFFFFFFF.toInt(), 1200, 1f) }
                     }
                 }
             }
@@ -256,3 +288,137 @@ fun LiveScreen(store: Store) {
         }
     }
 }
+
+/**
+ * Android 17 style 8-LED Flashlight Quick Action Card:
+ * Features Google's Pixel Android 17 style expanding ray flashlight animation,
+ * one-tap toggle with spring physics, and long-press opening the Color Spectrum Wheel.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun Android17FlashlightCard(
+    store: Store,
+) {
+    val active by store.flashlightActive.collectAsStateWithLifecycle()
+    val color by store.flashlightColor.collectAsStateWithLifecycle()
+    val haptics = LocalHapticFeedback.current
+    var showColorPicker by remember { mutableStateOf(false) }
+
+    val currentColor = Color(color)
+    val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val animatedBg by animateColorAsState(
+        targetValue = if (active) currentColor.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
+        label = "flashlightBg",
+    )
+    val animatedBeamScale by animateFloatAsState(
+        targetValue = if (active) 1.25f else 0.85f,
+        animationSpec = spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMediumLow),
+        label = "beamScale",
+    )
+    val animatedBeamAlpha by animateFloatAsState(
+        targetValue = if (active) 0.95f else 0.35f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
+        label = "beamAlpha",
+    )
+
+    PixelCard(tone = if (active) 3 else 2) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.large)
+                .background(animatedBg)
+                .combinedClickable(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        store.toggleFlashlight()
+                    },
+                    onLongClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showColorPicker = true
+                    },
+                )
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.weight(1f, fill = false),
+            ) {
+                // Android 17 Animated Flashlight Emitter Icon
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(
+                            if (active) currentColor.copy(alpha = 0.30f)
+                            else MaterialTheme.colorScheme.surfaceContainerHighest,
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Canvas(Modifier.size(34.dp)) {
+                        val cx = size.width / 2f
+                        val cy = size.height / 2f
+                        if (active) {
+                            // Flashlight radiating light cone rays (Android 17 animation)
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    listOf(
+                                        currentColor.copy(alpha = 0.75f * animatedBeamAlpha),
+                                        Color.Transparent,
+                                    ),
+                                    center = Offset(cx, cy),
+                                    radius = size.width * 0.75f * animatedBeamScale,
+                                ),
+                                radius = size.width * 0.75f * animatedBeamScale,
+                                center = Offset(cx, cy),
+                            )
+                        }
+                        // Core Flashlight Icon
+                        drawCircle(
+                            if (active) currentColor else inactiveColor,
+                            radius = size.width * 0.28f,
+                            center = Offset(cx, cy),
+                        )
+                        if (active) {
+                            drawCircle(
+                                Color.White,
+                                radius = size.width * 0.12f,
+                                center = Offset(cx, cy),
+                            )
+                        }
+                    }
+                }
+
+                Column {
+                    Text(
+                        stringResource(R.string.live_flashlight_title),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Caption(
+                        stringResource(
+                            if (active) R.string.live_flashlight_subtitle_on
+                            else R.string.live_flashlight_subtitle_off
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    if (showColorPicker) {
+        ColorSpectrumDialog(
+            initialColor = color,
+            onDismiss = { showColorPicker = false },
+            onColorSelected = { selectedColor ->
+                store.setFlashlightColor(selectedColor)
+            },
+        )
+    }
+}
+
+
+
+

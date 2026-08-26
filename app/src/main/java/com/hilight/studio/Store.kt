@@ -90,6 +90,15 @@ class Store private constructor(private val app: Context) {
     private val _ambient = MutableStateFlow(loadAmbient())
     val ambient: StateFlow<Ambient> = _ambient.asStateFlow()
 
+    private val _flashlightActive = MutableStateFlow(false)
+    val flashlightActive: StateFlow<Boolean> = _flashlightActive.asStateFlow()
+
+    private val _flashlightColor = MutableStateFlow(prefs.getInt("flashlightColor", 0xFFFFFFFF.toInt()))
+    val flashlightColor: StateFlow<Int> = _flashlightColor.asStateFlow()
+
+    private val _flashlightBrightness = MutableStateFlow(prefs.getFloat("flashlightBrightness", 1f))
+    val flashlightBrightness: StateFlow<Float> = _flashlightBrightness.asStateFlow()
+
     private val _presets = MutableStateFlow(loadPresets())
     val presets: StateFlow<List<Preset>> = _presets.asStateFlow()
 
@@ -850,12 +859,16 @@ class Store private constructor(private val app: Context) {
         // only once fireAlert has confirmed the switch is on.
         send(_enabled.value || preview != null, alert, arm)
         alertExpiry?.let { main.removeCallbacks(it) }
-        val r = Runnable {
+        if (durationMs > 0) {
+            val r = Runnable {
+                alertExpiry = null
+                releaseAlert()
+            }
+            alertExpiry = r
+            main.postDelayed(r, durationMs.toLong() + 150)
+        } else {
             alertExpiry = null
-            releaseAlert()
         }
-        alertExpiry = r
-        main.postDelayed(r, durationMs.toLong() + 150)
     }
 
     /** Drops the top layer and re-pushes whatever sits underneath it. */
@@ -863,6 +876,7 @@ class Store private constructor(private val app: Context) {
         activeAlert = null
         alertIsPreview = false
         _previewLook.value = null
+        _flashlightActive.value = false
         pushCurrent(arm = false)       // handing the layer back must not extend the ambient window
     }
 
@@ -936,6 +950,63 @@ class Store private constructor(private val app: Context) {
         alertExpiry = null
         // clears the test immediately, and does not hand ambient a fresh window on the way out
         releaseAlert()
+    }
+
+    /** Toggles the 8-LED HiLight Flashlight on or off. */
+    fun toggleFlashlight() {
+        setFlashlight(!_flashlightActive.value)
+    }
+
+    /** Controls the 8-LED HiLight Flashlight mode. */
+    fun setFlashlight(
+        active: Boolean,
+        color: Int = _flashlightColor.value,
+        brightness: Float = _flashlightBrightness.value,
+    ) {
+        _flashlightActive.value = active
+        if (active) {
+            holdAlert(
+                alert = Bridge.alertJson(
+                    id = Bridge.nextAlertId(),
+                    pattern = Pattern.SOLID,
+                    color = color,
+                    durationMs = 0,
+                    speedMs = 1000,
+                    brightness = brightness,
+                    source = AlertSource.PREVIEW,
+                ),
+                durationMs = 0,
+                arm = true,
+                preview = Ambient(
+                    pattern = Pattern.SOLID,
+                    color = color,
+                    brightness = brightness,
+                ),
+            )
+        } else {
+            if (alertIsPreview) {
+                stopPreview()
+            }
+        }
+    }
+
+    /** Sets the 8-LED Flashlight color and persists it. */
+    fun setFlashlightColor(color: Int) {
+        _flashlightColor.value = color
+        prefs.edit().putInt("flashlightColor", color).apply()
+        if (_flashlightActive.value) {
+            setFlashlight(true, color = color, brightness = _flashlightBrightness.value)
+        }
+    }
+
+    /** Sets the 8-LED Flashlight brightness level and persists it. */
+    fun setFlashlightBrightness(brightness: Float) {
+        val b = brightness.coerceIn(0.05f, 1f)
+        _flashlightBrightness.value = b
+        prefs.edit().putFloat("flashlightBrightness", b).apply()
+        if (_flashlightActive.value) {
+            setFlashlight(true, color = _flashlightColor.value, brightness = b)
+        }
     }
 
     /** Battery level from the sticky broadcast — no receiver to keep alive. */

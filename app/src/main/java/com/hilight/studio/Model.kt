@@ -76,7 +76,7 @@ data class Ambient(
     val color: Int = 0xFF7C4DFF.toInt(),
     val secondColor: Int = 0xFF00E5FF.toInt(),
     val perLed: List<Int> = List(LED_COUNT) { 0xFF7C4DFF.toInt() },
-    val brightness: Float = 0.7f,
+    val brightness: Float = 1.0f,
     val speedMs: Int = 2500,
     val rainbowSpread: Boolean = true,
     val randomIntervalMs: Int = 1500,
@@ -96,10 +96,9 @@ data class Ambient(
         put("randomSaturation", randomSaturation.toDouble())
         put("rotateMs", rotateMs)
         when (pattern) {
-            Pattern.CUSTOM -> put("colors", JSONArray().also { a -> perLed.forEach { a.put(it.toUInt().toLong()) } })
-            Pattern.GRADIENT -> put(
+            Pattern.CUSTOM, Pattern.GRADIENT -> put(
                 "colors",
-                JSONArray().put(color.toUInt().toLong()).put(secondColor.toUInt().toLong())
+                JSONArray().also { a -> perLed.forEach { a.put(it.toUInt().toLong()) } },
             )
             else -> put("color", color.toUInt().toLong())
         }
@@ -113,7 +112,7 @@ data class Ambient(
             perLed = o.optJSONArray("perLed")?.let { a ->
                 (0 until a.length()).map { a.optLong(it).toInt() }
             }?.takeIf { it.size == LED_COUNT } ?: List(LED_COUNT) { 0xFF7C4DFF.toInt() },
-            brightness = o.optDouble("brightness", 0.7).toFloat(),
+            brightness = o.optDouble("brightness", 1.0).toFloat(),
             speedMs = o.optInt("speedMs", 2500),
             rainbowSpread = o.optBoolean("rainbowSpread", true),
             randomIntervalMs = o.optInt("randomIntervalMs", 1500),

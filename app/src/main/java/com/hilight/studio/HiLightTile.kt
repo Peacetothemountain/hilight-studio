@@ -1,79 +1,63 @@
 package com.hilight.studio
 
-import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Intent
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
+import androidx.activity.ComponentDialog
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
-/**
- * Quick Settings tile: take the array over, or hand it back, without opening the app.
- *
- * The tile is unavailable when no renderer is connected, and tapping it in that state opens Setup
- * rather than silently doing nothing.
- */
 class HiLightTile : TileService() {
-
     private val store by lazy { Store.get(this) }
-
-    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private var listeningJob: Job? = null
 
     override fun onStartListening() {
         super.onStartListening()
-        store.refreshStatus()
         render()
-        // the renderer connection is asynchronous, so re-read shortly after binding
-        main.postDelayed({
-            store.refreshStatus()
-            render()
-        }, 900)
+        listeningJob?.cancel()
+        listeningJob = scope.launch {
+            store.flashlightActive.collect {
+                render()
+            }
+        }
+    }
+
+    override fun onStopListening() {
+        super.onStopListening()
+        listeningJob?.cancel()
     }
 
     override fun onClick() {
         super.onClick()
-        store.refreshStatus()
-        if (!store.status.value.alive) {
-            openApp()
-            return
-        }
-        store.setEnabled(!store.enabled.value)
+        store.toggleFlashlight()
         render()
     }
 
     private fun render() {
         val tile = qsTile ?: return
-        val status = store.status.value
-        val on = store.enabled.value
-        // Never UNAVAILABLE: this build hides unavailable third-party tiles entirely, and a tile the
-        // user cannot even tap to find out why is worse than one that explains itself in the subtitle.
-        tile.state = if (on && status.alive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        // A TileService is a Context of its own, so the strings come from getString rather than from
-        // stringResource: there is no composition out here, and no Activity to borrow one from. The
-        // panel calls onStartListening every time it opens, so a language change is picked up the
-        // next time the tile is shown.
+        val on = store.flashlightActive.value
+        tile.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.icon = android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_flashlight)
         tile.label = getString(R.string.tile_label)
-        tile.subtitle = when {
-            store.suppression.value != null -> getString(store.suppression.value!!.shortRes)
-            !status.alive -> getString(R.string.tile_no_renderer)
-            !on -> getString(R.string.tile_off)
-            status.resting -> getString(R.string.tile_resting)
-            status.ambientHeld -> getString(R.string.tile_timed_out)
-            else -> getString(store.ambient.value.pattern.labelRes)
-        }
+        tile.subtitle = if (on) "On" else "Off"
         tile.updateTile()
     }
 
-    private fun openApp() {
-        val intent = Intent(this, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val pending = PendingIntent.getActivity(
-            this, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        startActivityAndCollapse(pending)
-    }
-
     companion object {
-        /** Nudges the tile to re-read state after the app changes something. */
         fun refresh(ctx: android.content.Context) {
             runCatching {
                 requestListeningState(ctx, ComponentName(ctx, HiLightTile::class.java))

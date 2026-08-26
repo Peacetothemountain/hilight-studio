@@ -19,3 +19,4 @@ skills-lock.json
 
 # Retain local logo explorations without publishing them.
 docs/media/hilight-studio-logo-v*.png
+.kotlin/

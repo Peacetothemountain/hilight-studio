@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:pivotX="54.0"
+        android:pivotY="57.0"
+        android:translateX="0.0"
+        android:translateY="-3.0"
+        android:scaleX="1.15"
+        android:scaleY="1.15">
+
+        <!-- 1. Ambient Occlusion Drop Shadow underneath Camera Island -->
+        <path
+            android:fillColor="#40000000"
+            android:pathData="M37,44 H71 A13,13 0 0 1 84,57 A13,13 0 0 1 71,70 H37 A13,13 0 0 1 24,57 A13,13 0 0 1 37,44 Z" />
+
+        <!-- 2. Titanium Perimeter Capsule Frame (Pixel 11 Pro XL Iconic Island) -->
+        <path
+            android:fillColor="#3E4240"
+            android:strokeColor="#747A78"
+            android:strokeWidth="1.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M37,41 H71 A13,13 0 0 1 84,54 A13,13 0 0 1 71,67 H37 A13,13 0 0 1 24,54 A13,13 0 0 1 37,41 Z" />
+
+        <!-- 3. Jet-Black Sapphire Glass Window (Inset Capsule) -->
+        <path
+            android:fillColor="#050607"
+            android:strokeColor="#1E2220"
+            android:strokeWidth="1.0"
+            android:pathData="M37,43 H71 A11,11 0 0 1 82,54 A11,11 0 0 1 71,65 H37 A11,11 0 0 1 26,54 A11,11 0 0 1 37,43 Z" />
+
+        <!-- Lens 1 (50MP Wide - Left) -->
+        <path
+            android:fillColor="#181B1A"
+            android:strokeColor="#3D4240"
+            android:strokeWidth="0.8"
+            android:pathData="M34,54m-4.2,0a4.2,4.2 0 1,1 8.4,0a4.2,4.2 0 1,1 -8.4,0" />
+        <path
+            android:fillColor="#0A0C0E"
+            android:pathData="M34,54m-3.2,0a3.2,3.2 0 1,1 6.4,0a3.2,3.2 0 1,1 -6.4,0" />
+        <!-- Sapphire anti-reflective glint -->
+        <path
+            android:fillColor="#3A5C96"
+            android:pathData="M33.2,53.2m-1.8,0a1.8,1.8 0 1,1 3.6,0a1.8,1.8 0 1,1 -3.6,0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M32.8,52.8m-0.6,0a0.6,0.6 0 1,1 1.2,0a0.6,0.6 0 1,1 -1.2,0" />
+
+        <!-- Lens 2 (48MP Center Ultrawide) -->
+        <path
+            android:fillColor="#181B1A"
+            android:strokeColor="#4A504E"
+            android:strokeWidth="0.9"
+            android:pathData="M46,54m-4.8,0a4.8,4.8 0 1,1 9.6,0a4.8,4.8 0 1,1 -9.6,0" />
+        <path
+            android:fillColor="#080A0C"
+            android:pathData="M46,54m-3.6,0a3.6,3.6 0 1,1 7.2,0a3.6,3.6 0 1,1 -7.2,0" />
+        <!-- Sapphire anti-reflective glint -->
+        <path
+            android:fillColor="#244E8A"
+            android:pathData="M45.2,53.2m-2.0,0a2.0,2.0 0 1,1 4.0,0a2.0,2.0 0 1,1 -4.0,0" />
+        <path
+            android:fillColor="#1E6855"
+            android:pathData="M46.8,54.8m-1.2,0a1.2,1.2 0 1,1 2.4,0a1.2,1.2 0 1,1 -2.4,0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M44.8,52.8m-0.7,0a0.7,0.7 0 1,1 1.4,0a0.7,0.7 0 1,1 -1.4,0" />
+
+        <!-- Lens 3 (48MP 5x Telephoto - Right of center) -->
+        <path
+            android:fillColor="#181B1A"
+            android:strokeColor="#3D4240"
+            android:strokeWidth="0.8"
+            android:pathData="M58,54m-4.2,0a4.2,4.2 0 1,1 8.4,0a4.2,4.2 0 1,1 -8.4,0" />
+        <path
+            android:fillColor="#0A0C0E"
+            android:pathData="M58,54m-3.2,0a3.2,3.2 0 1,1 6.4,0a3.2,3.2 0 1,1 -6.4,0" />
+        <!-- Sapphire anti-reflective glint -->
+        <path
+            android:fillColor="#3A5C96"
+            android:pathData="M57.2,53.2m-1.8,0a1.8,1.8 0 1,1 3.6,0a1.8,1.8 0 1,1 -3.6,0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M56.8,52.8m-0.6,0a0.6,0.6 0 1,1 1.2,0a0.6,0.6 0 1,1 -1.2,0" />
+
+        <!-- Tiny Sensor Dot between Lens 3 and HiLight Flash -->
+        <path
+            android:fillColor="#101312"
+            android:pathData="M65.5,54m-0.8,0a0.8,0.8 0 1,1 1.6,0a0.8,0.8 0 1,1 -1.6,0" />
+
+        <!-- 4. HiLight Diffuser Flash Module (Far Right) -->
+        <!-- Volumetric Radiant Glow -->
+        <path
+            android:fillColor="#224285F4"
+            android:pathData="M73,54m-11,0a11,11 0 1,1 22,0a11,11 0 1,1 -22,0" />
+        <path
+            android:fillColor="#339B72CB"
+            android:pathData="M73,54m-8.5,0a8.5,8.5 0 1,1 17,0a8.5,8.5 0 1,1 -17,0" />
+
+        <!-- Titanium Bezel Housing -->
+        <path
+            android:fillColor="#202322"
+            android:strokeColor="#606664"
+            android:strokeWidth="0.8"
+            android:pathData="M73,54m-6.4,0a6.4,6.4 0 1,1 12.8,0a6.4,6.4 0 1,1 -12.8,0" />
+
+        <!-- Milky White Optical Silica Diffuser Disc -->
+        <path
+            android:fillColor="#F0F4F8"
+            android:pathData="M73,54m-5.4,0a5.4,5.4 0 1,1 10.8,0a5.4,5.4 0 1,1 -10.8,0" />
+
+        <!-- 8 Micro-LED Emitters -->
+        <path android:fillColor="#1A73E8" android:pathData="M76.5,54m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" />
+        <path android:fillColor="#9B72CB" android:pathData="M75.5,56.5m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" />
+        <path android:fillColor="#D96570" android:pathData="M73,57.5m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" />
+        <path android:fillColor="#EA4335" android:pathData="M70.5,56.5m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" />
+        <path android:fillColor="#00C4FF" android:pathData="M69.5,54m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" />
+        <path android:fillColor="#4285F4" android:pathData="M70.5,51.5m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" />
+        <path android:fillColor="#A142F4" android:pathData="M73,50.5m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" />
+        <path android:fillColor="#24C6DC" android:pathData="M75.5,51.5m-1.1,0a1.1,1.1 0 1,1 2.2,0a1.1,1.1 0 1,1 -2.2,0" />
+
+        <!-- Brilliant White Center Diode Flare -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M73,54m-1.8,0a1.8,1.8 0 1,1 3.6,0a1.8,1.8 0 1,1 -3.6,0" />
+    </group>
+</vector>
+

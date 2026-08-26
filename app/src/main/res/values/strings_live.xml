@@ -77,4 +77,21 @@
     <string name="widget_intensity">Intensity</string>
     <string name="widget_percent">%1$d%%</string>
 
+    <!-- 8-LED Flashlight strings -->
+    <string name="live_flashlight_title">8-LED Flashlight</string>
+    <string name="live_flashlight_subtitle_on">Flashlight active · Hold for color wheel</string>
+    <string name="live_flashlight_subtitle_off">Tap to turn on · Hold for color wheel</string>
+    <string name="live_flashlight_color_select">Flashlight Color</string>
+
+    <!-- Google Pixel Native Stock Effects -->
+    <string name="live_effect_assistant">Assistant</string>
+    <string name="live_effect_timer">Timer</string>
+    <string name="live_effect_camera">Camera</string>
+    <string name="live_effect_battery">Battery</string>
+    <string name="live_effect_call">Call Alert</string>
+    <string name="live_effect_notify">Notify</string>
+    <string name="live_effect_wallpaper">Wallpaper</string>
+    <string name="live_effect_sunset">Sunset</string>
+    <string name="live_effect_cyber">Cyberpunk</string>
+
 </resources>

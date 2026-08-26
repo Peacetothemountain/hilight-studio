@@ -17,11 +17,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -406,6 +412,8 @@ fun SetupScreen(store: Store) {
         ) { it.toInt().toString() }
     }
 
+    QuickSettingsTileCard(ctx)
+
     if (inspecting) {
         NotificationInspectorDialog(store) { inspecting = false }
     }
@@ -554,6 +562,39 @@ private fun AdbCard(ctx: Context) {
         Caption(stringResource(R.string.adb_verify_note))
         TextButton(onClick = { share(ctx, ADB_COMMAND) }) {
             ButtonLabel(stringResource(R.string.adb_send))
+        }
+    }
+}
+
+@Composable
+fun QuickSettingsTileCard(ctx: Context) {
+    PixelCard {
+        SectionTitle("Quick Settings Tile")
+        Caption("Add the HiLight tile to your Quick Settings panel to quickly toggle ambient lighting, flashlight, or stock effects from anywhere.")
+        FilledTonalButton(
+            onClick = {
+                val sbm = ctx.getSystemService(android.app.StatusBarManager::class.java)
+                val cn = android.content.ComponentName(ctx, HiLightTile::class.java)
+                sbm?.requestAddTileService(
+                    cn,
+                    ctx.getString(R.string.app_name),
+                    android.graphics.drawable.Icon.createWithResource(ctx, R.drawable.hilight_logo),
+                    { r -> ctx.mainExecutor.execute(r) },
+                    { result ->
+                        val msg = when (result) {
+                            android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "Tile added to Quick Settings!"
+                            android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "Tile is already in Quick Settings."
+                            else -> "Quick Settings request opened."
+                        }
+                        Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                    }
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            ButtonLabel("Add HiLight Tile to Quick Settings")
         }
     }
 }

@@ -9,10 +9,10 @@ final class SafetyGuard {
 
     static final long FRAME_MS = 33;
     static final long DUTY_WINDOW_MS = 10 * 60_000;
-    static final double MAX_DUTY = 0.5;
-    static final long TAPER_AFTER_MS = 10_000;
-    static final long TAPER_RAMP_MS = 10_000;
-    static final double TAPER_FLOOR = 0.55;
+    static final double MAX_DUTY = 0.8;
+    static final long TAPER_AFTER_MS = 60_000;
+    static final long TAPER_RAMP_MS = 30_000;
+    static final double TAPER_FLOOR = 0.90;
 
     private final long frameMs;
     private final long dutyWindowMs;

@@ -47,9 +47,9 @@ android {
 
     buildTypes {
         release {
-            optimization {
-                enable = true
-            }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Public APKs use the permanent release certificate when signing material is present
             // and remain non-debuggable. The stable certificate enables future in-place updates;
             // Play Protect reputation checks are separate and are not guaranteed by signing alone.
@@ -92,3 +92,4 @@ dependencies {
     // implementation for preference/state round-trip tests and is not packaged in the APK.
     testImplementation("org.json:json:20240303")
 }
+

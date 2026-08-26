@@ -6,14 +6,20 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -104,7 +110,7 @@ fun DeviceHero(
     active: Boolean,
     modifier: Modifier = Modifier,
     profile: DeviceProfile = rememberDeviceProfile(),
-    heightDp: Int = 190,
+    heightDp: Int = 210,
 ) {
     val frame = rememberLedFrame(pattern, cfg, active && profile.hasHiLight)
     val bloom by animateFloatAsState(
@@ -113,8 +119,7 @@ fun DeviceHero(
         label = "bloom",
     )
 
-    // Assembled before the modifier chain because a semantics block is not a composable scope, so
-    // stringResource cannot be called inside it.
+    // Assembled before the modifier chain because a semantics block is not a composable scope
     val modelName = profile.labelRes?.let { stringResource(it) } ?: profile.label
     val doing = when {
         !profile.hasHiLight -> stringResource(R.string.hero_no_array)
@@ -127,28 +132,26 @@ fun DeviceHero(
         modifier
             .fillMaxWidth()
             .height(heightDp.dp)
-            .clip(RoundedCornerShape(26.dp))           // the device is cropped by the card edge
+            .clip(RoundedCornerShape(28.dp))
             .semantics { contentDescription = description },
     ) {
         Canvas(Modifier.fillMaxWidth().height(heightDp.dp)) {
+            // Stage studio backdrop with radial lighting
             drawRect(Stage)
             drawRect(
                 brush = Brush.radialGradient(
                     listOf(StageHigh, Stage),
-                    center = Offset(size.width / 2f, size.height * 0.30f),
-                    radius = size.width * 0.8f,
+                    center = Offset(size.width / 2f, size.height * 0.40f),
+                    radius = size.width * 0.75f,
                 ),
             )
 
-            // Only the top of the device is shown, framed on the camera bar the way Google's own
-            // close-ups are; the body deliberately runs off the bottom of the card.
-            val phoneW = size.width * profile.zoom
-            val phoneH = phoneW / profile.aspect
-            val left =
-                if (profile.originX >= 0f) size.width * profile.originX
-                else (size.width - phoneW) / 2f
-            val top = size.height * 0.07f
-            val corner = phoneW * if (profile.foldStyle) 0.10f else 0.13f
+            // Centered phone shell with visible outer body and chassis
+            val phoneW = size.width * (if (profile.foldStyle) 0.94f else 0.84f)
+            val phoneH = size.height * 1.5f
+            val left = (size.width - phoneW) / 2f
+            val top = size.height * 0.10f
+            val corner = phoneW * (if (profile.foldStyle) 0.08f else 0.14f)
 
             if (bloom > 0.01f) drawSpill(frame, left, top, phoneW, bloom)
             drawBody(left, top, phoneW, phoneH, corner)
@@ -156,7 +159,7 @@ fun DeviceHero(
             if (profile.foldStyle) {
                 drawFoldCameraBlock(frame, left, top, phoneW, phoneH, bloom)
             } else {
-                drawVisorBar(frame, left, top, phoneW, phoneH, profile, bloom)
+                drawCenteredVisorBar(frame, left, top, phoneW, phoneH, profile, bloom)
             }
         }
     }
@@ -164,28 +167,74 @@ fun DeviceHero(
 
 // The device keeps its own graphite palette whatever the wallpaper does: a real Pixel is dark, and the
 // LEDs only read as light against a dark body.
-private val Stage = Color(0xFF0C0E11)
-private val StageHigh = Color(0xFF1A1D22)
-private val Body = Color(0xFF23262B)
-private val BodyEdge = Color(0xFF3C4045)
-private val Visor = Color(0xFF0E1114)
-private val Lens = Color(0xFF07090B)
-private val LensRing = Color(0xFF4A4F55)
+// Realistic Google Pixel 11 Pro Industrial Palette (Obsidian / Hazel Matte & Satin Titanium)
+private val Stage = Color(0xFF090B0E)
+private val StageHigh = Color(0xFF14171D)
+private val Body = Color(0xFF383B3A)
+private val BodyEdgeHighlight = Color(0xFF5E6360)
+private val BodyEdgeShadow = Color(0xFF262827)
+private val AntennaLine = Color(0xFF222423)
+private val VisorBody = Color(0xFF181B21)
+private val VisorEdge = Color(0xFF636C7A)
+private val SapphirePill = Color(0xFF040608)
+private val Lens = Color(0xFF040608)
 
 private fun DrawScope.drawBody(left: Float, top: Float, w: Float, h: Float, corner: Float) {
-    drawRoundRect(Body, Offset(left, top), Size(w, h), CornerRadius(corner))
+    // 1. Drop shadow / contact shadow
     drawRoundRect(
-        BodyEdge.copy(alpha = 0.7f),
+        Color.Black.copy(alpha = 0.65f),
+        Offset(left, top + h * 0.015f),
+        Size(w, h),
+        CornerRadius(corner),
+    )
+
+    // 2. Satin frosted Hazel / Obsidian matte glass back
+    drawRoundRect(
+        brush = Brush.linearGradient(
+            listOf(Color(0xFF454947), Color(0xFF383B39), Color(0xFF2D302E)),
+            start = Offset(left, top),
+            end = Offset(left + w, top + h * 0.8f),
+        ),
+        topLeft = Offset(left, top),
+        size = Size(w, h),
+        cornerRadius = CornerRadius(corner),
+    )
+
+    // 3. Precision CNC-machined titanium perimeter frame
+    drawRoundRect(
+        brush = Brush.linearGradient(
+            listOf(BodyEdgeHighlight, BodyEdgeShadow, BodyEdgeHighlight.copy(alpha = 0.6f)),
+            start = Offset(left, top),
+            end = Offset(left + w, top + h),
+        ),
         Offset(left, top),
         Size(w, h),
         CornerRadius(corner),
-        style = Stroke(width = size.height * 0.004f),
+        style = Stroke(width = size.height * 0.007f),
     )
+
+    // 4. Antenna line notches as on official device
+    val antH = h * 0.022f
+    val antW = w * 0.007f
+    // Top center antenna line
+    drawRect(
+        color = AntennaLine,
+        topLeft = Offset(left + w * 0.50f - antW / 2f, top),
+        size = Size(antW, antH),
+    )
+    // Left side antenna line
+    drawRect(
+        color = AntennaLine,
+        topLeft = Offset(left, top + h * 0.32f),
+        size = Size(antH, antW),
+    )
+
+    // 5. Subtle studio softbox specular light reflection
     drawRoundRect(
         brush = Brush.linearGradient(
-            listOf(Color.White.copy(alpha = 0.05f), Color.Transparent),
+            listOf(Color.White.copy(alpha = 0.07f), Color.Transparent),
             start = Offset(left, top),
-            end = Offset(left + w, top + h * 0.6f),
+            end = Offset(left + w * 0.6f, top + h * 0.4f),
         ),
         topLeft = Offset(left, top),
         size = Size(w, h),
@@ -193,8 +242,11 @@ private fun DrawScope.drawBody(left: Float, top: Float, w: Float, h: Float, corn
     )
 }
 
-/** Pro and Pro XL: full-width pill, three lenses, HiLight at the right-hand end. */
-private fun DrawScope.drawVisorBar(
+/**
+ * Centered camera visor bar across the phone back with authentic Pixel 11 Pro triple lens
+ * pill cutout and prominent HiLight frosted optical diffuser flash module.
+ */
+private fun DrawScope.drawCenteredVisorBar(
     frame: IntArray,
     left: Float,
     top: Float,
@@ -203,40 +255,208 @@ private fun DrawScope.drawVisorBar(
     profile: DeviceProfile,
     bloom: Float,
 ) {
-    val barH = phoneW * 0.245f
-    val barTop = top + phoneH * 0.105f
-    val inset = phoneW * 0.05f
-    val barW = phoneW - inset * 2
+    val barW = phoneW * 0.94f
+    val barH = phoneW * 0.25f
+    val barLeft = left + (phoneW - barW) / 2f
+    val barTop = top + phoneW * 0.095f
+
+    drawPixel11ProCameraIsland(
+        colors = frame,
+        barLeft = barLeft,
+        barTop = barTop,
+        barW = barW,
+        barH = barH,
+        bloom = bloom,
+    )
+}
+
+/**
+ * Direct 1:1 photorealistic rendering of the official Pixel 11 Pro XL camera island
+ * matching the hardware specifications and official photography.
+ */
+private fun DrawScope.drawPixel11ProCameraIsland(
+    colors: IntArray,
+    barLeft: Float,
+    barTop: Float,
+    barW: Float,
+    barH: Float,
+    bloom: Float,
+    isCroppedMacro: Boolean = false,
+) {
     val cy = barTop + barH / 2f
+    val cornerRadius = CornerRadius(barH / 2f)
 
-    drawRoundRect(Visor, Offset(left + inset, barTop), Size(barW, barH), CornerRadius(barH / 2))
+    // 1. Deep Ambient Occlusion Drop Shadow casting downwards onto matte phone back
     drawRoundRect(
-        LensRing.copy(alpha = 0.5f),
-        Offset(left + inset, barTop),
-        Size(barW, barH),
-        CornerRadius(barH / 2),
-        style = Stroke(width = size.height * 0.003f),
+        color = Color.Black.copy(alpha = 0.70f),
+        topLeft = Offset(barLeft, barTop + barH * 0.12f),
+        size = Size(barW, barH),
+        cornerRadius = cornerRadius,
+    )
+    drawRoundRect(
+        color = Color.Black.copy(alpha = 0.38f),
+        topLeft = Offset(barLeft, barTop + barH * 0.22f),
+        size = Size(barW, barH),
+        cornerRadius = cornerRadius,
     )
 
-    val lensR = barH * 0.31f
-    val positions = if (profile.lensCount >= 3) listOf(0.14f, 0.32f, 0.50f) else listOf(0.18f, 0.40f)
-    positions.forEach { fx -> drawLens(left + inset + barW * fx, cy, lensR) }
-
-    // the small square sensor window that sits above the flash on the real bar
-    val sensorSize = barH * 0.13f
+    // 2. Precision-machined Satin Titanium Island Perimeter Frame
     drawRoundRect(
-        Color(0xFF2A2E33),
-        Offset(left + inset + barW * 0.70f - sensorSize / 2, cy - barH * 0.34f),
-        Size(sensorSize, sensorSize),
-        CornerRadius(sensorSize * 0.25f),
+        brush = Brush.verticalGradient(
+            listOf(
+                Color(0xFF6B706E), // Top metallic specular sheen
+                Color(0xFF484C4A), // Mid-tone titanium
+                Color(0xFF2B2E2C), // Bottom shadow
+            ),
+            startY = barTop,
+            endY = barTop + barH,
+        ),
+        topLeft = Offset(barLeft, barTop),
+        size = Size(barW, barH),
+        cornerRadius = cornerRadius,
     )
 
-    if (profile.hasHiLight) {
-        drawHiLightDisc(frame, Offset(left + inset + barW * 0.80f, cy), barH * 0.335f, bloom)
-    } else {
-        // non-Pro: plain flash, no array
-        drawLens(left + inset + barW * 0.74f, cy, barH * 0.15f)
-    }
+    // Outer titanium edge chamfer stroke
+    drawRoundRect(
+        brush = Brush.linearGradient(
+            listOf(Color(0xFF7E8481), Color(0xFF383C3A), Color(0xFF686D6B)),
+            start = Offset(barLeft, barTop),
+            end = Offset(barLeft + barW, barTop + barH),
+        ),
+        topLeft = Offset(barLeft, barTop),
+        size = Size(barW, barH),
+        cornerRadius = cornerRadius,
+        style = Stroke(width = barH * 0.032f),
+    )
+
+    // Top specular light hairline
+    drawLine(
+        brush = Brush.horizontalGradient(
+            listOf(Color.Transparent, Color.White.copy(alpha = 0.40f), Color.Transparent),
+            startX = barLeft + barW * 0.15f,
+            endX = barLeft + barW * 0.85f,
+        ),
+        start = Offset(barLeft + barW * 0.15f, barTop + 1f),
+        end = Offset(barLeft + barW * 0.85f, barTop + 1f),
+        strokeWidth = barH * 0.016f,
+    )
+
+    // 3. Jet-Black Sapphire Crystal Pill Window (Continuous Inset Capsule)
+    val innerInset = barH * 0.052f
+    val innerW = barW - innerInset * 2
+    val innerH = barH - innerInset * 2
+    val innerLeft = barLeft + innerInset
+    val innerTop = barTop + innerInset
+    val innerCornerRadius = CornerRadius(innerH / 2f)
+
+    drawRoundRect(
+        color = Color(0xFF030405), // Ultra-deep obsidian sapphire black
+        topLeft = Offset(innerLeft, innerTop),
+        size = Size(innerW, innerH),
+        cornerRadius = innerCornerRadius,
+    )
+    // Dark metallic glass retention bezel
+    drawRoundRect(
+        color = Color(0xFF1B1E1D),
+        topLeft = Offset(innerLeft, innerTop),
+        size = Size(innerW, innerH),
+        cornerRadius = innerCornerRadius,
+        style = Stroke(width = barH * 0.018f),
+    )
+
+    // Glass specular top-reflection arc
+    drawRoundRect(
+        brush = Brush.linearGradient(
+            listOf(Color.White.copy(alpha = 0.09f), Color.Transparent),
+            start = Offset(innerLeft, innerTop),
+            end = Offset(innerLeft + innerW * 0.5f, innerTop + innerH * 0.5f),
+        ),
+        topLeft = Offset(innerLeft, innerTop),
+        size = Size(innerW, innerH),
+        cornerRadius = innerCornerRadius,
+    )
+
+    // 4. Triple Optical Lenses (Wide 50MP, Center Ultrawide 48MP, 5x Telephoto 48MP)
+    val lensR = innerH * 0.36f
+    // As seen on real device: Left Lens (0.19w), Center Lens (0.42w), Right Lens (0.64w), Flash (0.86w)
+    val lx1 = innerLeft + innerW * 0.19f
+    val lx2 = innerLeft + innerW * 0.42f
+    val lx3 = innerLeft + innerW * 0.64f
+    val flashX = innerLeft + innerW * 0.86f
+
+    // Lens 1: Wide 50MP
+    drawOfficialCameraLens(lx1, cy, lensR, 1.0f)
+    // Lens 2: Center Ultrawide 48MP (slightly larger aperture ring)
+    drawOfficialCameraLens(lx2, cy, lensR * 1.06f, 1.06f)
+    // Lens 3: 5x Telephoto 48MP
+    drawOfficialCameraLens(lx3, cy, lensR, 1.0f)
+
+    // Tiny sensor dot between lens 3 and flash
+    val sensorX = innerLeft + innerW * 0.76f
+    drawCircle(
+        color = Color(0xFF0D0F0E),
+        radius = barH * 0.026f,
+        center = Offset(sensorX, cy),
+    )
+
+    // 5. Official HiLight Diffuser Flash Disc (Far Right - Inset in Sapphire Glass)
+    val flashR = innerH * 0.28f
+    drawHiLightDisc(colors, Offset(flashX, cy), flashR, bloom)
+}
+
+/**
+ * Official Google Pixel 11 Pro triple camera optics rendering:
+ * Concentric knurled iris rings, deep sensor well, dark sapphire multi-coatings,
+ * and realistic glass glints.
+ */
+private fun DrawScope.drawOfficialCameraLens(cx: Float, cy: Float, r: Float, scale: Float) {
+    // Outer titanium lens retention ring
+    drawCircle(Color(0xFF1E2120), radius = r, center = Offset(cx, cy))
+    drawCircle(
+        brush = Brush.sweepGradient(
+            listOf(Color(0xFF3C403E), Color(0xFF1A1C1B), Color(0xFF484C4A), Color(0xFF1A1C1B), Color(0xFF3C403E)),
+            center = Offset(cx, cy),
+        ),
+        radius = r,
+        center = Offset(cx, cy),
+        style = Stroke(width = r * 0.10f),
+    )
+
+    // Deep black optical cavity
+    drawCircle(Color(0xFF040506), radius = r * 0.86f, center = Offset(cx, cy))
+    drawCircle(Color(0xFF010203), radius = r * 0.58f, center = Offset(cx, cy))
+
+    // Anti-reflective multi-coating reflection (Dark sapphire blue with subtle emerald tint)
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color(0xFF1E3A6E).copy(alpha = 0.75f), Color.Transparent),
+            center = Offset(cx - r * 0.20f, cy - r * 0.22f),
+            radius = r * 0.65f,
+        ),
+        radius = r * 0.65f,
+        center = Offset(cx - r * 0.20f, cy - r * 0.22f),
+    )
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color(0xFF1B4E43).copy(alpha = 0.45f), Color.Transparent),
+            center = Offset(cx + r * 0.18f, cy + r * 0.20f),
+            radius = r * 0.50f,
+        ),
+        radius = r * 0.50f,
+        center = Offset(cx + r * 0.18f, cy + r * 0.20f),
+    )
+
+    // Specular glass pinpoint reflections
+    drawCircle(
+        Color.White.copy(alpha = 0.85f),
+        radius = r * 0.08f,
+        center = Offset(cx - r * 0.22f, cy - r * 0.25f),
+    )
+    drawCircle(
+        Color.White.copy(alpha = 0.45f),
+        radius = r * 0.04f,
+        center = Offset(cx + r * 0.20f, cy + r * 0.22f),
+    )
 }
 
 /** Pro Fold: compact camera block in the top-left corner, HiLight inside it. */
@@ -248,133 +468,359 @@ private fun DrawScope.drawFoldCameraBlock(
     phoneH: Float,
     bloom: Float,
 ) {
-    val blockW = phoneW * 0.40f
-    val blockH = phoneW * 0.165f
-    val blockLeft = left + phoneW * 0.045f
-    val blockTop = top + phoneH * 0.055f
+    val blockW = phoneW * 0.44f
+    val blockH = phoneW * 0.20f
+    val blockLeft = left + phoneW * 0.05f
+    val blockTop = top + phoneH * 0.06f
     val cy = blockTop + blockH / 2f
 
-    drawRoundRect(Visor, Offset(blockLeft, blockTop), Size(blockW, blockH), CornerRadius(blockH * 0.42f))
+    // Shadow
     drawRoundRect(
-        LensRing.copy(alpha = 0.5f),
+        Color.Black.copy(alpha = 0.55f),
+        Offset(blockLeft, blockTop + blockH * 0.08f),
+        Size(blockW, blockH),
+        CornerRadius(blockH * 0.35f),
+    )
+    // Titanium block
+    drawRoundRect(
+        brush = Brush.verticalGradient(
+            listOf(Color(0xFF262B34), VisorBody, Color(0xFF121419)),
+            startY = blockTop,
+            endY = blockTop + blockH,
+        ),
         Offset(blockLeft, blockTop),
         Size(blockW, blockH),
-        CornerRadius(blockH * 0.42f),
+        CornerRadius(blockH * 0.35f),
+    )
+    drawRoundRect(
+        VisorEdge.copy(alpha = 0.7f),
+        Offset(blockLeft, blockTop),
+        Size(blockW, blockH),
+        CornerRadius(blockH * 0.35f),
         style = Stroke(width = size.height * 0.003f),
     )
 
-    // three rear cameras, then the array
-    val lensR = blockH * 0.28f
-    listOf(0.15f, 0.35f, 0.55f).forEach { fx -> drawLens(blockLeft + blockW * fx, cy, lensR) }
-    drawHiLightDisc(frame, Offset(blockLeft + blockW * 0.82f, cy), blockH * 0.30f, bloom)
+    val lensR = blockH * 0.26f
+    drawLens(blockLeft + blockW * 0.16f, cy, lensR)
+    drawLens(blockLeft + blockW * 0.38f, cy, lensR)
+    drawPeriscopeLens(blockLeft + blockW * 0.60f, cy, lensR)
+    drawHiLightDisc(frame, Offset(blockLeft + blockW * 0.83f, cy), blockH * 0.28f, bloom)
 
-    // hinge seam, so the silhouette reads as the foldable
+    // Stainless steel hinge seam
     drawRoundRect(
-        BodyEdge.copy(alpha = 0.55f),
+        BodyEdgeHighlight.copy(alpha = 0.65f),
         Offset(left + phoneW * 0.495f, top + phoneH * 0.02f),
         Size(phoneW * 0.012f, phoneH * 0.96f),
         CornerRadius(phoneW * 0.006f),
     )
 }
 
+/** 50MP Wide & 48MP Ultrawide Camera Lens */
 private fun DrawScope.drawLens(cx: Float, cy: Float, r: Float) {
-    drawCircle(Lens, radius = r, center = Offset(cx, cy))
+    // Outer lens housing with beveled metallic ring
+    drawCircle(Color(0xFF2C313A), radius = r * 1.08f, center = Offset(cx, cy))
     drawCircle(
-        LensRing.copy(alpha = 0.85f),
-        radius = r,
+        brush = Brush.sweepGradient(
+            listOf(Color(0xFF4F5663), Color(0xFF23272F), Color(0xFF606877), Color(0xFF23272F), Color(0xFF4F5663)),
+            center = Offset(cx, cy),
+        ),
+        radius = r * 1.05f,
         center = Offset(cx, cy),
-        style = Stroke(width = size.height * 0.0035f),
+        style = Stroke(width = size.height * 0.0028f),
     )
-    drawCircle(Color(0xFF10131A), radius = r * 0.6f, center = Offset(cx, cy))
-    // glass highlight
+    drawCircle(Lens, radius = r, center = Offset(cx, cy))
+
+    // Deep optical sensor cavity
+    drawCircle(Color(0xFF090B0E), radius = r * 0.76f, center = Offset(cx, cy))
+    drawCircle(Color(0xFF030406), radius = r * 0.50f, center = Offset(cx, cy))
+
+    // Multi-coated anti-reflective glass reflections (sapphire blue & emerald green)
     drawCircle(
-        Color(0xFF3D4A6B).copy(alpha = 0.55f),
-        radius = r * 0.2f,
-        center = Offset(cx - r * 0.18f, cy - r * 0.2f),
+        brush = Brush.radialGradient(
+            listOf(Color(0xFF38558A).copy(alpha = 0.60f), Color.Transparent),
+            center = Offset(cx - r * 0.22f, cy - r * 0.25f),
+            radius = r * 0.60f,
+        ),
+        radius = r * 0.60f,
+        center = Offset(cx - r * 0.22f, cy - r * 0.25f),
+    )
+    drawCircle(
+        brush = Brush.radialGradient(
+            listOf(Color(0xFF1E6B52).copy(alpha = 0.40f), Color.Transparent),
+            center = Offset(cx + r * 0.18f, cy + r * 0.20f),
+            radius = r * 0.45f,
+        ),
+        radius = r * 0.45f,
+        center = Offset(cx + r * 0.18f, cy + r * 0.20f),
+    )
+    // Specular glass point highlight
+    drawCircle(
+        Color.White.copy(alpha = 0.75f),
+        radius = r * 0.08f,
+        center = Offset(cx - r * 0.25f, cy - r * 0.28f),
+    )
+}
+
+/** 5x Telephoto Periscope Rectangular Prism Lens */
+private fun DrawScope.drawPeriscopeLens(cx: Float, cy: Float, r: Float) {
+    val boxSize = r * 1.6f
+    val boxLeft = cx - boxSize / 2f
+    val boxTop = cy - boxSize / 2f
+    val corner = boxSize * 0.25f
+
+    // Outer dark titanium casing
+    drawRoundRect(Color(0xFF2C313A), Offset(boxLeft, boxTop), Size(boxSize, boxSize), CornerRadius(corner))
+    drawRoundRect(
+        Color(0xFF4F5663),
+        Offset(boxLeft, boxTop),
+        Size(boxSize, boxSize),
+        CornerRadius(corner),
+        style = Stroke(width = size.height * 0.0025f),
+    )
+    // Deep dark periscope aperture
+    val innerSize = boxSize * 0.76f
+    val innerLeft = cx - innerSize / 2f
+    val innerTop = cy - innerSize / 2f
+    drawRoundRect(Color(0xFF030406), Offset(innerLeft, innerTop), Size(innerSize, innerSize), CornerRadius(corner * 0.7f))
+
+    // Rectangular prism anti-reflective reflection
+    drawRoundRect(
+        brush = Brush.linearGradient(
+            listOf(Color(0xFF38558A).copy(alpha = 0.45f), Color(0xFF1E6B52).copy(alpha = 0.25f), Color.Transparent),
+            start = Offset(innerLeft, innerTop),
+            end = Offset(innerLeft + innerSize, innerTop + innerSize),
+        ),
+        topLeft = Offset(innerLeft, innerTop),
+        size = Size(innerSize, innerSize),
+        cornerRadius = CornerRadius(corner * 0.7f),
+    )
+    // Specular corner highlight
+    drawCircle(
+        Color.White.copy(alpha = 0.65f),
+        radius = r * 0.07f,
+        center = Offset(innerLeft + innerSize * 0.25f, innerTop + innerSize * 0.25f),
     )
 }
 
 /**
- * HiLight itself: eight LEDs behind one flash window.
- *
- * Each LED is placed on a ring inside the window and blurred outward, so the result looks like the
- * single diffused disc on the real hardware while still showing pattern movement around it.
+ * 1:1 Official Pixel 11 Pro HiLight Flash Optical Diffuser Module:
+ * Precision-machined titanium circular bezel ring with a frosted white optical diffuser disc
+ * housing 8 addressable micro-LED emitters with true volumetric light scattering.
  */
 private fun DrawScope.drawHiLightDisc(colors: IntArray, center: Offset, radius: Float, bloom: Float) {
-    // the dark window the array shines through
-    drawCircle(Color(0xFF05070A), radius = radius * 1.12f, center = center)
+    val bezelR = radius * 1.16f
+
+    // 1. Brushed aerospace titanium bezel housing
+    drawCircle(Color(0xFF15181F), radius = bezelR, center = center)
     drawCircle(
-        LensRing.copy(alpha = 0.5f),
-        radius = radius * 1.12f,
+        brush = Brush.sweepGradient(
+            listOf(
+                Color(0xFF6B7280), Color(0xFF2E333C), Color(0xFF868E9C),
+                Color(0xFF2E333C), Color(0xFF6B7280)
+            ),
+            center = center,
+        ),
+        radius = bezelR,
         center = center,
-        style = Stroke(width = size.height * 0.0025f),
+        style = Stroke(width = size.height * 0.0035f),
     )
+    // Inner bezel recession shadow
+    drawCircle(Color(0xFF080A0E), radius = radius * 1.02f, center = center)
 
-    if (bloom <= 0.01f || colors.isEmpty()) {
-        drawCircle(Color(0xFF0C1016), radius = radius, center = center)
-        return
-    }
-
-    val n = colors.size
+    val n = colors.size.coerceAtLeast(1)
     var lumSum = 0f
     var r = 0f
     var g = 0f
     var b = 0f
-    for (i in 0 until n) {
+    for (i in 0 until colors.size) {
         val c = Color(colors[i])
         lumSum += (c.red + c.green + c.blue) / 3f
         r += c.red; g += c.green; b += c.blue
     }
     val avg = Color(r / n, g / n, b / n)
-    val lum = lumSum / n
+    val lum = (lumSum / n).coerceIn(0f, 1f)
+    val isLit = bloom > 0.01f && lum > 0.01f
 
-    // The lamp itself: a crisp disc of the blended colour, with each LED's own colour showing through
-    // from its position inside the window. Clipped, so the light does not smear across the bar.
+    // 2. Frosted Milky-White Diffuser Disc
     clipPath(Path().apply { addOval(Rect(center = center, radius = radius)) }) {
-        drawCircle(avg.copy(alpha = 0.92f * bloom), radius = radius, center = center)
-        for (i in 0 until n) {
-            val c = Color(colors[i])
-            if ((c.red + c.green + c.blue) / 3f <= 0.01f) continue
-            val angle = (i.toFloat() / n) * 2f * Math.PI.toFloat() - Math.PI.toFloat() / 2f
-            val pos = Offset(
-                center.x + cos(angle) * radius * 0.46f,
-                center.y + sin(angle) * radius * 0.46f,
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    listOf(c.copy(alpha = 0.75f * bloom), c.copy(alpha = 0f)),
-                    center = pos,
-                    radius = radius * 0.85f,
-                ),
-                radius = radius * 0.85f,
-                center = pos,
-            )
-        }
-        // hot centre
+        // Base milky diffuser background
+        val milkyBase = if (isLit) Color(0xFFF4F7FB) else Color(0xFFE2E7EF)
+        val milkyEdge = if (isLit) Color(0xFFD0D8E4) else Color(0xFFB8C0CC)
+
         drawCircle(
             brush = Brush.radialGradient(
-                listOf(Color.White.copy(alpha = 0.30f * bloom * lum), Color.Transparent),
-                center = center,
-                radius = radius * 0.6f,
+                listOf(milkyBase, milkyEdge),
+                center = Offset(center.x - radius * 0.12f, center.y - radius * 0.12f),
+                radius = radius,
             ),
-            radius = radius * 0.6f,
+            radius = radius,
+            center = center,
+        )
+
+        // Micro-Fresnel Circular Texture Etching Rings
+        drawCircle(
+            Color.White.copy(alpha = if (isLit) 0.35f else 0.45f),
+            radius = radius * 0.80f,
+            center = center,
+            style = Stroke(width = size.height * 0.0018f),
+        )
+        drawCircle(
+            Color.White.copy(alpha = if (isLit) 0.30f else 0.40f),
+            radius = radius * 0.56f,
+            center = center,
+            style = Stroke(width = size.height * 0.0018f),
+        )
+        drawCircle(
+            Color.White.copy(alpha = if (isLit) 0.25f else 0.35f),
+            radius = radius * 0.34f,
+            center = center,
+            style = Stroke(width = size.height * 0.0015f),
+        )
+
+        // 3. The 8 Micro-LED Emitters
+        val emitterDistance = radius * 0.58f
+        val emitterRadius = radius * 0.19f
+        val ledCount = if (colors.isNotEmpty()) colors.size else 8
+
+        for (i in 0 until ledCount) {
+            val angle = (i.toFloat() / ledCount) * 2f * Math.PI.toFloat() - Math.PI.toFloat() / 2f
+            val pos = Offset(
+                center.x + cos(angle) * emitterDistance,
+                center.y + sin(angle) * emitterDistance,
+            )
+
+            if (!isLit || colors.isEmpty()) {
+                // OFF state: subtle translucent micro-diode cavities visible through white frosted glass
+                drawCircle(
+                    Color(0xFF9EA6B2).copy(alpha = 0.55f),
+                    radius = emitterRadius * 0.80f,
+                    center = pos,
+                )
+                drawCircle(
+                    Color(0xFF788190).copy(alpha = 0.45f),
+                    radius = emitterRadius * 0.48f,
+                    center = pos,
+                )
+                drawCircle(
+                    Color.White.copy(alpha = 0.50f),
+                    radius = emitterRadius * 0.22f,
+                    center = Offset(pos.x - emitterRadius * 0.15f, pos.y - emitterRadius * 0.15f),
+                )
+            } else {
+                val ledColor = Color(colors[i % colors.size])
+                val ledLum = (ledColor.red + ledColor.green + ledColor.blue) / 3f
+                if (ledLum > 0.01f) {
+                    // Volumetric diffusion cone inside frosted silica glass
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            listOf(
+                                ledColor.copy(alpha = 0.90f * bloom),
+                                ledColor.copy(alpha = 0.40f * bloom),
+                                Color.Transparent,
+                            ),
+                            center = pos,
+                            radius = radius * 0.75f,
+                        ),
+                        radius = radius * 0.75f,
+                        center = pos,
+                    )
+                    // High-intensity diode emitter core
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.98f * bloom),
+                                ledColor.copy(alpha = 0.92f * bloom),
+                            ),
+                            center = pos,
+                            radius = emitterRadius * 0.90f,
+                        ),
+                        radius = emitterRadius * 0.90f,
+                        center = pos,
+                    )
+                    // Brilliant diode spark
+                    drawCircle(
+                        Color.White.copy(alpha = 0.95f * bloom),
+                        radius = emitterRadius * 0.38f,
+                        center = pos,
+                    )
+                }
+            }
+        }
+
+        if (isLit) {
+            // Overall luminous milky glow blending across the diffuser disc
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(
+                        avg.copy(alpha = 0.48f * bloom * lum),
+                        avg.copy(alpha = 0.16f * bloom * lum),
+                    ),
+                    center = center,
+                    radius = radius,
+                ),
+                radius = radius,
+                center = center,
+            )
+            // Hot optical center flare
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.70f * bloom * lum),
+                        avg.copy(alpha = 0.22f * bloom * lum),
+                        Color.Transparent,
+                    ),
+                    center = center,
+                    radius = radius * 0.55f,
+                ),
+                radius = radius * 0.55f,
+                center = center,
+            )
+        }
+
+        // Frosted glass top specular surface reflection arc
+        drawCircle(
+            brush = Brush.linearGradient(
+                listOf(Color.White.copy(alpha = 0.45f), Color.Transparent),
+                start = Offset(center.x - radius * 0.6f, center.y - radius * 0.7f),
+                end = Offset(center.x + radius * 0.4f, center.y + radius * 0.3f),
+            ),
+            radius = radius,
             center = center,
         )
     }
 
-    // bloom outside the window, kept modest so the disc keeps its edge
-    drawCircle(
-        brush = Brush.radialGradient(
-            listOf(avg.copy(alpha = 0.34f * bloom * lum), Color.Transparent),
+    // 4. External luminous radiance bloom onto visor and back glass
+    if (isLit) {
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(
+                    avg.copy(alpha = 0.55f * bloom * lum),
+                    avg.copy(alpha = 0.20f * bloom * lum),
+                    Color.Transparent,
+                ),
+                center = center,
+                radius = radius * 2.8f,
+            ),
+            radius = radius * 2.8f,
             center = center,
-            radius = radius * 2.5f,
-        ),
-        radius = radius * 2.5f,
-        center = center,
-    )
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(
+                    Color.White.copy(alpha = 0.35f * bloom * lum),
+                    avg.copy(alpha = 0.10f * bloom * lum),
+                    Color.Transparent,
+                ),
+                center = center,
+                radius = radius * 1.5f,
+            ),
+            radius = radius * 1.5f,
+            center = center,
+        )
+    }
 }
 
-/** Soft pool of colour under the phone. */
+/** Soft pool of colour under the phone reflecting off the desk surface. */
 private fun DrawScope.drawSpill(colors: IntArray, left: Float, top: Float, phoneW: Float, bloom: Float) {
     var r = 0f
     var g = 0f
@@ -387,11 +833,15 @@ private fun DrawScope.drawSpill(colors: IntArray, left: Float, top: Float, phone
     val avg = Color(r / n, g / n, b / n)
     val lum = (avg.red + avg.green + avg.blue) / 3f
     if (lum < 0.02f) return
-    val center = Offset(left + phoneW / 2f, top + phoneW * 0.22f)
-    val radius = phoneW * 1.25f
+    val center = Offset(left + phoneW * 0.75f, top + phoneW * 0.22f)
+    val radius = phoneW * 1.35f
     drawCircle(
         brush = Brush.radialGradient(
-            listOf(avg.copy(alpha = 0.32f * bloom * lum), Color.Transparent),
+            listOf(
+                avg.copy(alpha = 0.38f * bloom * lum),
+                avg.copy(alpha = 0.12f * bloom * lum),
+                Color.Transparent,
+            ),
             center = center,
             radius = radius,
         ),
@@ -465,3 +915,51 @@ fun LedStrip(
         }
     }
 }
+
+/**
+ * Direct cropped close-up of the official Pixel 11 Pro XL camera visor island:
+ * Used on the Style page to display the authentic titanium capsule bar
+ * with the 3 sapphire lenses and the active HiLight 8-LED diffuser module.
+ */
+@Composable
+fun HiLightDiffuserPreview(
+    pattern: Pattern,
+    cfg: Ambient,
+    modifier: Modifier = Modifier,
+    active: Boolean = true,
+) {
+    val frame = rememberLedFrame(pattern, cfg, active)
+    val bloom by animateFloatAsState(
+        targetValue = if (active) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow),
+        label = "diffuserBloom",
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(108.dp)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val barW = (w * 0.94f).coerceAtMost(360.dp.toPx())
+            val barH = barW * 0.26f
+            val barLeft = (w - barW) / 2f
+            val barTop = (h - barH) / 2f
+
+            drawPixel11ProCameraIsland(
+                colors = frame,
+                barLeft = barLeft,
+                barTop = barTop,
+                barW = barW,
+                barH = barH,
+                bloom = bloom,
+                isCroppedMacro = true,
+            )
+        }
+    }
+}
+

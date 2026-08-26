@@ -44,6 +44,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
@@ -64,7 +71,11 @@ fun AmbientScreen(store: Store) {
 
     PixelCard(tone = 2) {
         SectionTitle(stringResource(R.string.style_always_on_style))
-        LedStrip(ambient.pattern, ambient, active = enabled, heightDp = 46)
+        HiLightDiffuserPreview(
+            pattern = ambient.pattern,
+            cfg = ambient,
+            active = enabled,
+        )
         PatternCarousel(
             selected = ambient.pattern,
             options = Pattern.entries,
@@ -134,7 +145,7 @@ fun AmbientScreen(store: Store) {
                         }
                     }
                     ColorPicker(
-                        color = ambient.perLed[editingLed],
+                        color = ambient.perLed.getOrElse(editingLed) { ambient.color },
                         onColor = { c ->
                             store.setAmbient(
                                 ambient.copy(
@@ -178,16 +189,58 @@ fun AmbientScreen(store: Store) {
 
                 Pattern.GRADIENT -> PixelCard {
                     SectionTitle(stringResource(R.string.pattern_gradient))
+                    Caption(stringResource(R.string.style_per_led_hint))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        ambient.perLed.forEachIndexed { i, c ->
+                            LedSwatch(
+                                color = c,
+                                selected = i == editingLed,
+                                modifier = Modifier.weight(1f),
+                            ) { editingLed = i }
+                        }
+                    }
                     ColorPicker(
-                        ambient.color,
-                        { store.setAmbient(ambient.copy(color = it)) },
-                        stringResource(R.string.style_gradient_start),
+                        color = ambient.perLed.getOrElse(editingLed) { ambient.color },
+                        onColor = { c ->
+                            store.setAmbient(
+                                ambient.copy(
+                                    perLed = ambient.perLed.toMutableList().also { it[editingLed] = c })
+                            )
+                        },
+                        label = stringResource(R.string.style_led_number, editingLed + 1),
                     )
-                    ColorPicker(
-                        ambient.secondColor,
-                        { store.setAmbient(ambient.copy(secondColor = it)) },
-                        stringResource(R.string.style_gradient_end),
-                    )
+                    val wallpaper = wallpaperLedColours()
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(
+                            onClick = {
+                                val startC = ambient.perLed.firstOrNull() ?: ambient.color
+                                val endC = ambient.perLed.lastOrNull() ?: ambient.secondColor
+                                val interpolated = List(LED_COUNT) { i ->
+                                    val k = i.toFloat() / (LED_COUNT - 1).coerceAtLeast(1)
+                                    val r = (Color(startC).red * (1 - k) + Color(endC).red * k).coerceIn(0f, 1f)
+                                    val g = (Color(startC).green * (1 - k) + Color(endC).green * k).coerceIn(0f, 1f)
+                                    val b = (Color(startC).blue * (1 - k) + Color(endC).blue * k).coerceIn(0f, 1f)
+                                    android.graphics.Color.valueOf(r, g, b).toArgb()
+                                }
+                                store.setAmbient(ambient.copy(perLed = interpolated))
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { ButtonLabel("Blend") }
+                        FilledTonalButton(
+                            onClick = { store.setAmbient(ambient.copy(perLed = wallpaper)) },
+                            modifier = Modifier.weight(1f),
+                        ) { ButtonLabel(stringResource(R.string.style_wallpaper)) }
+                        FilledTonalButton(
+                            onClick = {
+                                val sunset = listOf(
+                                    0xFFFF1744.toInt(), 0xFFFF5252.toInt(), 0xFFFF6D00.toInt(), 0xFFFF9100.toInt(),
+                                    0xFFFFAB00.toInt(), 0xFFFFD600.toInt(), 0xFFFF80AB.toInt(), 0xFFD500F9.toInt()
+                                )
+                                store.setAmbient(ambient.copy(perLed = sunset))
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { ButtonLabel("Sunset") }
+                    }
                 }
 
                 Pattern.OFF -> PixelCard {
@@ -225,6 +278,8 @@ fun AmbientScreen(store: Store) {
             }
         }
     }
+
+    QuickSettingsTileCard(LocalContext.current)
 }
 
 /** Saved looks: apply with a tap, save the current one, and move them between devices as JSON. */
@@ -455,3 +510,5 @@ private fun LedSwatch(
         contentAlignment = Alignment.Center,
     ) {}
 }
+
+
