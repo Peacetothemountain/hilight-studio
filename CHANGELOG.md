@@ -2,7 +2,15 @@
 
 All notable changes to HiLight Studio are documented here.
 
-## [Unreleased]
+## [1.0.9] - 2026-08-26
+
+- Implemented Android 17 QPR2 native flashlight UI with dynamic expanding light-beam geometry.
+- Added Material 3 Color Spectrum Wheel with live color preview disc and elevated thumb selector.
+- Introduced compound Quick Settings tile with angled flashlight torch and adjacent Material color wheel.
+- Elevated default ambient and torch power to full 100% saturation across all 8 LEDs / 24 RGB dies.
+- Extended safety taper limits to maintain full continuous drive current during flashlight mode.
+- Added Material You dynamic wallpaper theme integration to the dialog container shell.
+- Updated GitHub release workflow using Blacksmith runners.
 
 ## [1.0.8-experimental] - 2026-08-25
 
