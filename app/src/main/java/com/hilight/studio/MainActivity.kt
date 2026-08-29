@@ -141,8 +141,9 @@ private fun App(store: Store) {
                     }
                 },
                 actions = {
+                    val rendererConnected = store.isRendererConnectedForUi(status)
                     LivePill(
-                        text = if (status.alive) {
+                        text = if (rendererConnected) {
                             stringResource(
                                 R.string.main_connected_pill,
                                 status.ledCount,
@@ -151,7 +152,7 @@ private fun App(store: Store) {
                         } else {
                             stringResource(R.string.main_not_connected)
                         },
-                        ok = status.alive,
+                        ok = rendererConnected,
                         modifier = Modifier.padding(end = 16.dp),
                     )
                 },
