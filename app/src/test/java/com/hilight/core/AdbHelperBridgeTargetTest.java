@@ -108,7 +108,12 @@ public final class AdbHelperBridgeTargetTest {
         File target = File.createTempFile("hilight-renderer-target-", ".lock");
         File link = new File(target.getParentFile(), target.getName() + "-link");
         try {
-            Files.createSymbolicLink(link.toPath(), target.toPath());
+            try {
+                Files.createSymbolicLink(link.toPath(), target.toPath());
+            } catch (UnsupportedOperationException | java.nio.file.FileSystemException notSupported) {
+                // Host environment does not support/permit symlink creation
+                return;
+            }
 
             assertThrows(
                     IOException.class,

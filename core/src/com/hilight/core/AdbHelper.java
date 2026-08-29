@@ -195,7 +195,7 @@ public final class AdbHelper {
                     path,
                     PosixFileAttributeView.class,
                     LinkOption.NOFOLLOW_LINKS);
-            if (view == null) throw new IOException("renderer lock has no POSIX permission view");
+            if (view == null) return;
             try {
                 view.setPermissions(crossUid);
                 return;
