@@ -45,6 +45,7 @@ class HiLightTile : TileService() {
         super.onClick()
         store.toggleFlashlight()
         render()
+        HiLightTile.refresh(this)
     }
 
     private fun render() {

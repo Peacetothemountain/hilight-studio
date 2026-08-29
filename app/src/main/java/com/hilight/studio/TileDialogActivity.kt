@@ -61,7 +61,7 @@ class TileDialogActivity : ComponentActivity() {
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            onClick = { finish() }
+                            onClick = { finishAndRemoveTask() }
                         )
                         .systemBarsPadding()
                         .padding(horizontal = 16.dp, vertical = 36.dp),
@@ -153,7 +153,7 @@ class TileDialogActivity : ComponentActivity() {
                                 TextButton(
                                     onClick = {
                                         store.setFlashlight(false)
-                                        finish()
+                                        finishAndRemoveTask()
                                     }
                                 ) {
                                     Text(
@@ -164,7 +164,7 @@ class TileDialogActivity : ComponentActivity() {
                                 }
 
                                 TextButton(
-                                    onClick = { finish() }
+                                    onClick = { finishAndRemoveTask() }
                                 ) {
                                     Text(
                                         text = "Done",

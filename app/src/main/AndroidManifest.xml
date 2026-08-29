@@ -48,6 +48,7 @@
             android:exported="true"
             android:theme="@style/Theme.HiLightStudio.Dialog"
             android:excludeFromRecents="true"
+            android:noHistory="true"
             android:taskAffinity=""
             android:launchMode="singleInstance">
             <intent-filter>

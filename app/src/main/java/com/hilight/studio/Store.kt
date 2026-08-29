@@ -1379,9 +1379,9 @@ class Store private constructor(private val app: Context) {
                 ),
             )
         } else {
-            if (alertIsPreview) {
-                stopPreview()
-            }
+            alertExpiry?.let { main.removeCallbacks(it) }
+            alertExpiry = null
+            releaseAlert()
         }
     }
 
