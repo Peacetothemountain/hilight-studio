@@ -58,7 +58,7 @@ HiLight Studio (normal app)                    privileged renderer (uid 0 or 200
 ┌─────────────────────────────────┐            ┌────────────────────────────────────┐
 │ Compose UI: Live/Ambient/Apps   │  binder    │ Shizuku: HiLightUserService        │
 │ NotificationTrigger (listener)  │ ─────────► │   com.hilight.studio:hilight       │
-│ ForegroundWatcher (UsageStats)  │            ├────────────────────────────────────┤
+│ ForegroundWatcher (apps/sensor) │            ├────────────────────────────────────┤
 │ Store: layering + rules         │  2 JSON    │ ADB: com.hilight.core.AdbHelper    │
 │ Transport: Auto/Root/Shizuku/ADB│ ◄────────► │   run from the installed APK       │
 └─────────────────────────────────┘  files     └────────────────────────────────────┘
@@ -79,9 +79,9 @@ the Shizuku/ADB fallbacks.
 **Shizuku transport (no computer).** Shizuku v12 or newer launches `HiLightUserService` into a
 shell-UID process (`daemon(true)`, so it outlives the UI) and the app holds a real binder to it. State
 is pushed straight in, no polling. The app first peeks at the existing user-service version so it does
-not invoke a mismatched AIDL interface. Before visible/current state replay, the 1.0.9 candidate
-requires renderer contract 1, implementation revision 4, status schema 6, clear algorithm 1, app
-version code 10, and composite Shizuku service version 1004. A mismatch may receive only a minimal
+not invoke a mismatched AIDL interface. Before visible/current state replay, the current source
+requires renderer contract 1, implementation revision 5, status schema 6, clear algorithm 1, app
+version code 11, and composite Shizuku service version 1105. A mismatch may receive only a minimal
 disabled state to hold output dark; it is removed and rebound once, and every other transport remains
 fenced until the rejected binder is confirmed disconnected. Verified running as `shell` uid 2000.
 
@@ -126,6 +126,33 @@ Output layering, highest first:
 During a privacy-rule cooldown the renderer blanks the LEDs and closes its light session instead of
 falling through to a lower layer. Turning control off does the same, handing HiLight back to Android.
 
+### Face-down gating
+
+**Only while the phone is face down** can guard the complete output globally or one notification rule.
+The two entry points share one persisted **Needs testing — use with care** acknowledgement. A suitable
+gravity or accelerometer sensor is required before a new setting can be enabled; a restored setting
+can always be switched off even if the current phone has no suitable sensor.
+
+`ForegroundWatcher` is the app's existing `specialUse` foreground service. Its work plan now tracks
+foreground apps, phone position, or both, so this feature adds no second service and no new permission.
+The service prefers a wake-up gravity sensor, then a wake-up accelerometer, before falling back to
+non-wake variants. Its ongoing low-priority notification explains which work is active. Android limits
+continuous sensor delivery to ordinary background apps, which is why the foreground service is part of
+the feature rather than an optional optimisation.
+
+`FaceDownDetector` normalises gravity's Z axis, requires a stable 400 ms reading, and uses separate
+enter/exit thresholds to avoid rapid switching near the edge angle. Readings outside a plausible
+gravity magnitude are treated as motion and reset the settling window. Only a fresh stable
+`FACE_DOWN` result opens the gate. Missing sensor data, service startup failure, and readings older
+than five seconds all fail closed.
+
+The global condition is part of `GuardState`, not an early return in `Store.send`. Suppression still
+produces the normal `enabled=false` renderer document, preserving session release, cleanup, transport
+handoff, and stale-renderer fencing. A face-down-gated notification is checked once in the listener
+and again on Store's main thread; lifting the phone while it is active releases it immediately through
+the same alert cleanup path. A finite manual Test preview bypasses only this position gate so the
+person can see the preview while holding the phone; quiet-hours and power guards still apply.
+
 ## The device illustration
 
 The Live tab draws the phone's own back with HiLight lit by the same pattern maths the hardware runs.
@@ -160,7 +187,8 @@ the lamp.
 - privacy path: the v1.0.6 standalone helper observed Pixel Camera through AppOps, entered the camera
   rule's lit phase with a live LED session, then returned to inactive and closed the session when the
   camera process stopped
-- animation keeps running with the screen off (`mState=DOZE`), including the face-down case
+- animation keeps running with the screen off (`mState=DOZE`); this was verified before the
+  configurable face-down gate was added
 - turning control off closes the session and blanks the array
 - Shizuku transport: user service starts as `shell` uid 2000 with 8 LEDs, binder connects, ambient and
   notification alerts render with no adb helper running at all
@@ -294,9 +322,11 @@ silence a configured microphone rule.
   measured every system-session priority. The Setup priority applies only to HiLight's normal visible
   session.
 - Cleanup status distinguishes Binder acceptance, effective framework readback, shadowing, I/O
-  failure, and exhausted retries. `getLightState()` is still framework evidence rather than a sensor
-  looking at the panel, so even `framework_effective_unverified` or `completed_unverified` never
-  means the physical LED was observed dark. **Copy LED diagnostics** exports an allowlist of device
+  failure, and exhausted retries. A nonzero RGB mismatch is shadowing; an RGB-dark but non-exact
+  readback remains Binder-accepted/unverified; only an exact ARGB match is framework-effective.
+  `getLightState()` is still framework evidence rather than a sensor looking at the panel, so even
+  `framework_effective_unverified` or `completed_unverified` never means the physical LED was
+  observed dark. **Copy LED diagnostics** exports an allowlist of device
   build, renderer identity, transport, session/cleanup state, and revisions; it excludes notification
   data, packages, accounts, stable device identifiers, and logcat.
 - ADB reset sends `SIGTERM` through the constrained helper-process pattern, treats an app-process with
@@ -310,4 +340,10 @@ silence a configured microphone rule.
   renderer-identity, session-ownership, and call/Gemini hand-back behavior.
 - Deep sleep suspends the CPU, so animations freeze at the last frame until the device wakes. Static
   colours are unaffected.
+- Face-down detection depends on the phone's position sensors and therefore remains marked **Needs
+  testing — use with care**. Phones without a wake-up gravity/accelerometer sensor use a non-wake
+  fallback, which may not report a new position until the CPU wakes. The maintainer's Pixel 11 Pro
+  XL exposes only that non-wake path: during deep sleep, face-down and pickup transitions can be
+  delayed until wake, when the stale-reading guard closes the gate and runs the normal renderer
+  release. HiLight never assumes success: an unavailable or stale reading keeps the array fully off.
 - Notification rules ignore ongoing notifications (media, progress) to avoid constant retriggering.

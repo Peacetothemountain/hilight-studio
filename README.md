@@ -19,6 +19,8 @@ Control the eight-LED HiLight array on Pixel 11 Pro devices.
 
 - Solid colours and animated patterns across all eight LEDs
 - Per-app rules for foreground use and notifications
+- Optional global or per-notification **face-down only** rules, with a first-use caution and live
+  position status
 - Customisable microphone and camera activity rules, with any built-in animation and colour, for any
   app or one selected app
 - Per-contact rules: a colour for one person or one chat, picked from the chats HiLight has seen
@@ -54,18 +56,18 @@ For now, install HiLight Studio with ADB. Play Protect may block direct installs
 3. From the folder containing the APK, run:
 
 ```bash
-adb install -r HiLight-Studio-v1.0.9-experimental-signed.apk
+adb install -r HiLight-Studio-v1.0.10-experimental-signed.apk
 ```
 
 If you previously installed v1.0.3 or an older debug-signed build, uninstall it once before installing a permanently signed release because the signing certificates are different:
 
 ```bash
 adb uninstall com.hilight.studio
-adb install HiLight-Studio-v1.0.9-experimental-signed.apk
+adb install HiLight-Studio-v1.0.10-experimental-signed.apk
 ```
 
 The published APK is an experimental release signed with HiLight Studio's permanent release
-certificate. v1.0.9 updates any release carrying that same certificate normally.
+certificate. v1.0.10 updates any release carrying that same certificate normally.
 
 HiLight Studio needs privileged access to the Android lights service. The renderer must be restarted after every reboot.
 

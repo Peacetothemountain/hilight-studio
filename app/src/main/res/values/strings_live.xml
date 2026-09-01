@@ -30,6 +30,7 @@
     <string name="live_suppressed_low_battery">Battery is low, so the array is paused. Charging resumes it.</string>
     <string name="live_suppressed_power_saver">Battery Saver is on, so the array is paused.</string>
     <string name="live_suppressed_screen_on">Set to light only while the screen is off.</string>
+    <string name="live_suppressed_not_face_down">Waiting for the phone to be face down. The LED array stays fully off.</string>
 
     <!-- The safety limits, said out loud so that a dark array never reads as a fault. In the
          countdown %1$d is the seconds left and %2$d the percentage of the duty allowance spent. The

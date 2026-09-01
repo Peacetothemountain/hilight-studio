@@ -225,6 +225,9 @@ public final class Engine {
             return;
         }
         synchronized (lock) {
+            // A stopped renderer is terminal. Late Binder/file-bridge deliveries must not mutate its
+            // revisions or arm a cleanup cycle that no render thread remains to drive.
+            if (stopped) return;
             long elapsedRealtime = elapsedRealtimeClock.nowMs();
             stateGeneration++;
             boolean previouslyEnabled = state.optBoolean("enabled", false) ||

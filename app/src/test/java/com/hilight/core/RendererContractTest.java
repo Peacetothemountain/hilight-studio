@@ -10,10 +10,12 @@ import org.junit.Test;
 public final class RendererContractTest {
 
     @Test
-    public void compositeServiceVersionCannotReuseReleasedV108Daemon() {
-        int serviceVersion = RendererContract.shizukuServiceVersion(10);
+    public void compositeServiceVersionCannotReuseReleasedRenderer() {
+        int serviceVersion = RendererContract.shizukuServiceVersion(11);
 
-        assertEquals(1004, serviceVersion);
+        assertEquals(1105, serviceVersion);
+        assertNotEquals(1004, serviceVersion);
+        assertNotEquals(1005, serviceVersion);
         assertNotEquals(9, serviceVersion);
     }
 

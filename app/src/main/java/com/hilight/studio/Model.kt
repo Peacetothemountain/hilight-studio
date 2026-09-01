@@ -154,6 +154,7 @@ data class AppRule(
     val speedMs: Int = 800,
     val brightness: Float = 1f,
     val onlyWhenScreenOff: Boolean = false,
+    val onlyWhenFaceDown: Boolean = false,
     /** only fire when the title or text contains this, case-insensitive; empty means anything */
     val keyword: String = "",
     /**
@@ -205,6 +206,7 @@ data class AppRule(
         put("speedMs", speedMs)
         put("brightness", brightness.toDouble())
         put("onlyWhenScreenOff", onlyWhenScreenOff)
+        put("onlyWhenFaceDown", onlyWhenFaceDown)
         put("keyword", keyword)
         conversationKey?.let { put("conversationKey", it) }
         conversationName?.let { put("conversationName", it) }
@@ -229,6 +231,7 @@ data class AppRule(
             speedMs = o.optInt("speedMs", 800),
             brightness = o.optDouble("brightness", 1.0).toFloat(),
             onlyWhenScreenOff = o.optBoolean("onlyWhenScreenOff", false),
+            onlyWhenFaceDown = o.optBoolean("onlyWhenFaceDown", false),
             keyword = o.optString("keyword", ""),
             conversationKey = o.optString("conversationKey", "").takeIf { it.isNotEmpty() },
             conversationName = o.optString("conversationName", "").takeIf { it.isNotEmpty() },
@@ -363,6 +366,7 @@ enum class Suppression(@StringRes val shortRes: Int) {
     LOW_BATTERY(R.string.suppression_low_battery),
     POWER_SAVER(R.string.suppression_power_saver),
     SCREEN_ON(R.string.suppression_screen_on),
+    NOT_FACE_DOWN(R.string.suppression_not_face_down),
 }
 
 /** Nothing may run indefinitely: these are the ceilings the UI enforces. */

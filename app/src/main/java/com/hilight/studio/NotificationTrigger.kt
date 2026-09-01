@@ -88,6 +88,11 @@ class NotificationTrigger : NotificationListenerService() {
             store.noteRuleFired(rule, info)
             return
         }
+        if (rule.onlyWhenFaceDown && !store.isFaceDownNow()) {
+            Log.i(TAG, "matched ${info.pkg} but the rule only flashes while face down")
+            store.noteRuleFired(rule, info)
+            return
+        }
         if (store.respectDnd.value && inDoNotDisturb()) {
             Log.i(TAG, "matched ${info.pkg} but suppressed by Do Not Disturb")
             store.noteRuleFired(rule, info)

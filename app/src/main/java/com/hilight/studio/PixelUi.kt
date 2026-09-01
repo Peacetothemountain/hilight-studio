@@ -23,12 +23,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.ripple
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -39,6 +42,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +57,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -271,7 +277,12 @@ fun PixelToggleRow(
 }
 
 @Composable
-fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+fun ToggleRow(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onChange: (Boolean) -> Unit,
+) {
     val haptics = LocalHapticFeedback.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -288,13 +299,43 @@ fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Switch(
             checked = checked,
-            onCheckedChange = null,
+            enabled = enabled,
+            onCheckedChange = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onChange(it)
+            },
             modifier = Modifier.scale(0.9f)
         )
     }
+}
+
+/** First-use acknowledgement shared by global and per-notification face-down controls. */
+@Composable
+fun FaceDownConsentDialog(onAccepted: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.extraLarge,
+        title = { Text(stringResource(R.string.face_down_notice_title)) },
+        text = { Text(stringResource(R.string.face_down_notice_body)) },
+        confirmButton = {
+            TextButton(onClick = onAccepted) {
+                ButtonLabel(stringResource(R.string.common_i_understand))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                ButtonLabel(stringResource(R.string.common_cancel))
+            }
+        },
+    )
 }
 
 /** Slider with the value shown in a tonal badge that animates as it changes. */
@@ -304,10 +345,18 @@ fun PixelSlider(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     onChange: (Float) -> Unit,
+    /** For millisecond-valued sliders, lets the value pill accept an exact duration in seconds. */
+    typeInSeconds: Boolean = false,
     // Composable because the value badge often shows a duration, and a duration's units come from
     // resources now that they have to be translated.
     format: @Composable (Float) -> String = { "%.0f".format(it) },
 ) {
+    var typing by remember { mutableStateOf(false) }
+    val editSecondsLabel = if (typeInSeconds) {
+        stringResource(R.string.duration_edit_seconds_action)
+    } else {
+        null
+    }
     Column {
         Row(
             Modifier.fillMaxWidth(),
@@ -316,15 +365,31 @@ fun PixelSlider(
         ) {
             Text(label, style = MaterialTheme.typography.bodyLarge)
             Box(
-                Modifier
-                    .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
-                    .padding(horizontal = 10.dp, vertical = 3.dp)
+                modifier = if (typeInSeconds) {
+                    Modifier
+                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        .clip(CircleShape)
+                        .clickable(
+                            onClickLabel = editSecondsLabel,
+                            role = Role.Button,
+                        ) { typing = true }
+                } else {
+                    Modifier
+                },
+                contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    format(value),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
+                Box(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        format(value),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
             }
         }
         Slider(
@@ -335,6 +400,45 @@ fun PixelSlider(
                 activeTrackColor = MaterialTheme.colorScheme.primary,
                 inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             ),
+        )
+    }
+
+    if (typing) {
+        var text by remember {
+            mutableStateOf("%.2f".format(value / 1_000f).trimEnd('0').trimEnd('.', ','))
+        }
+        val typedMs = parseDurationSeconds(
+            text = text,
+            minMs = range.start.toInt(),
+            maxMs = range.endInclusive.toInt(),
+        )
+        AlertDialog(
+            onDismissRequest = { typing = false },
+            shape = MaterialTheme.shapes.extraLarge,
+            title = { Text(label) },
+            text = {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.duration_seconds_field)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = typedMs != null,
+                    onClick = {
+                        typedMs?.let { onChange(it.toFloat()) }
+                        typing = false
+                    },
+                ) { ButtonLabel(stringResource(R.string.common_save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { typing = false }) {
+                    ButtonLabel(stringResource(R.string.common_cancel))
+                }
+            },
         )
     }
 }
@@ -439,14 +543,21 @@ fun GatedDurationSlider(
     warnSecond: Pair<String, String>,
     onChange: (Int) -> Unit,
 ) {
-    var unlocked by remember(valueMs > safeMaxMs) { mutableStateOf(valueMs > safeMaxMs) }
+    var unlocked by remember { mutableStateOf(valueMs > safeMaxMs) }
     var asking by remember { mutableStateOf(false) }
+
+    // Loading a saved long duration must expose its full range, but moving back below the warning
+    // threshold must not revoke consent or collapse the slider in the middle of a drag.
+    LaunchedEffect(valueMs > safeMaxMs) {
+        if (valueMs > safeMaxMs) unlocked = true
+    }
 
     PixelSlider(
         label = label,
         value = valueMs.toFloat(),
         range = minMs.toFloat()..(if (unlocked) extendedMaxMs else safeMaxMs).toFloat(),
         onChange = { onChange(it.toInt()) },
+        typeInSeconds = true,
     ) { formatDuration(it.toInt()) }
 
     ToggleRow(unlockLabel, unlocked) { wanted ->

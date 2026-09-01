@@ -70,27 +70,27 @@ class RendererCompatibilityTest {
 
     @Test
     fun `Shizuku handshake accepts only a ready current renderer`() {
-        val expectedService = RendererContract.shizukuServiceVersion(10)
+        val expectedService = RendererContract.shizukuServiceVersion(11)
 
         assertEquals(
             null,
-            shizukuRendererCompatibilityFailure(currentJson(), expectedService, 10),
+            shizukuRendererCompatibilityFailure(currentJson(), expectedService, 11),
         )
     }
 
     @Test
     fun `Shizuku handshake rejects legacy unknown and wrong build renderers`() {
-        val expectedService = RendererContract.shizukuServiceVersion(10)
+        val expectedService = RendererContract.shizukuServiceVersion(11)
 
         assertTrue(
-            shizukuRendererCompatibilityFailure(JSONObject(), expectedService, 10)
+            shizukuRendererCompatibilityFailure(JSONObject(), expectedService, 11)
                 ?.startsWith("renderer status incomplete") == true,
         )
         assertTrue(
             shizukuRendererCompatibilityFailure(
                 currentJson().put("rendererServiceVersion", 9),
                 expectedService,
-                10,
+                11,
             )?.startsWith("renderer build mismatch") == true,
         )
     }
@@ -103,8 +103,8 @@ class RendererCompatibilityTest {
             "renderer engine is not ready",
             shizukuRendererCompatibilityFailure(
                 status,
-                RendererContract.shizukuServiceVersion(10),
-                10,
+                RendererContract.shizukuServiceVersion(11),
+                11,
             ),
         )
     }
@@ -116,8 +116,8 @@ class RendererCompatibilityTest {
         assertTrue(
             shizukuRendererCompatibilityFailure(
                 partial,
-                RendererContract.shizukuServiceVersion(10),
-                10,
+                RendererContract.shizukuServiceVersion(11),
+                11,
             )?.startsWith("renderer status incomplete") == true,
         )
         assertFalse(isCompleteShizukuRendererStatus(partial))
@@ -125,22 +125,23 @@ class RendererCompatibilityTest {
     }
 
     @Test
-    fun `v1_0_8 Shizuku renderer is removed before service 1004 is admitted`() {
-        val expectedService = RendererContract.shizukuServiceVersion(10)
+    fun `released v1_0_9 Shizuku renderer is removed before service 1105 is admitted`() {
+        val expectedService = RendererContract.shizukuServiceVersion(11)
         val oldRenderer = currentJson()
-            .put("rendererVersionCode", 9)
-            .put("rendererVersionName", "1.0.8")
-            .put("rendererServiceVersion", RendererContract.shizukuServiceVersion(9))
+            .put("rendererImplementationRevision", 4)
+            .put("rendererVersionCode", 10)
+            .put("rendererVersionName", "1.0.9")
+            .put("rendererServiceVersion", 1_004)
         val safeIdle = JSONObject(Bridge.incompatibleRendererSafeIdleJson(10L))
 
-        assertEquals(1_004, expectedService)
+        assertEquals(1_105, expectedService)
         assertEquals(
             ShizukuPeekAction.WAIT_FOR_CALLBACK,
-            shizukuPeekAction(9, priorPeekReportedExisting = false, retry = false),
+            shizukuPeekAction(1_004, priorPeekReportedExisting = false, retry = false),
         )
         assertTrue(
-            shizukuRendererCompatibilityFailure(oldRenderer, expectedService, 10)
-                ?.startsWith("renderer build mismatch") == true,
+            shizukuRendererCompatibilityFailure(oldRenderer, expectedService, 11)
+                ?.startsWith("renderer contract mismatch") == true,
         )
         assertFalse(safeIdle.getBoolean("enabled"))
         assertFalse(safeIdle.getBoolean("arm"))
@@ -148,7 +149,7 @@ class RendererCompatibilityTest {
         assertTrue(canCompleteTrackedShizukuExit("old", setOf("old"), emptySet()))
         assertEquals(
             null,
-            shizukuRendererCompatibilityFailure(currentJson(), expectedService, 10),
+            shizukuRendererCompatibilityFailure(currentJson(), expectedService, 11),
         )
     }
 
@@ -194,8 +195,8 @@ class RendererCompatibilityTest {
         .put("rendererImplementationRevision", RendererContract.IMPLEMENTATION_REVISION)
         .put("rendererStatusSchemaVersion", RendererContract.STATUS_SCHEMA_VERSION)
         .put("rendererClearAlgorithmVersion", RendererContract.CLEAR_ALGORITHM_VERSION)
-        .put("rendererServiceVersion", RendererContract.shizukuServiceVersion(10))
-        .put("rendererVersionCode", 10)
-        .put("rendererVersionName", "1.0.9")
+        .put("rendererServiceVersion", RendererContract.shizukuServiceVersion(11))
+        .put("rendererVersionCode", 11)
+        .put("rendererVersionName", "1.0.10")
         .put("rendererReady", true)
 }

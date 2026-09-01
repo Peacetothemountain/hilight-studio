@@ -49,12 +49,16 @@
     <string name="rules_per_chat_notifications_only">Per-chat rules fire on notifications.</string>
     <string name="rules_trigger_notification">On notification</string>
     <string name="rules_trigger_foreground">While open</string>
+    <string name="rules_trigger_pair_hint">Each app can have one notification rule and one while-open rule.</string>
+    <string name="rules_both_triggers_exist">This app already has notification and while-open rules.</string>
+    <string name="rules_copy_settings">Copy settings to another app</string>
     <string name="rules_random_colour_each_time">Random colour each time</string>
     <string name="rules_chat_is_group">This chat is a group, so anything posted in it fires the rule.</string>
     <string name="rules_include_groups">Also when they post in a group</string>
     <string name="rules_include_groups_hint">Left off, only their own chat lights this colour, so the group chatter they are part of stays dark.</string>
     <string name="rules_keyword_label">Only if it mentions (optional)</string>
     <string name="rules_only_screen_off">Only when the screen is off</string>
+    <string name="rules_only_face_down">Only when the phone is face down</string>
     <string name="rules_time_per_cycle">Time per cycle</string>
     <string name="rules_brightness">Brightness</string>
     <string name="rules_test_on_leds">Test on the LEDs</string>

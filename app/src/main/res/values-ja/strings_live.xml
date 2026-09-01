@@ -54,6 +54,8 @@
     <string name="live_suppressed_power_saver">バッテリーセーバーがオンのため、LED アレイを一時停止しています。</string>
     <!-- "Set to light only while the screen is off." -->
     <string name="live_suppressed_screen_on">画面消灯時のみ点灯する設定になっています。</string>
+    <!-- "Waiting for the phone to be face down. The LED array stays fully off." -->
+    <string name="live_suppressed_not_face_down">端末が伏せられるまで待機中です。LED アレイは完全に消灯したままです。</string>
 
     <!-- The safety limits, said out loud so that a dark array never reads as a fault. In the
          countdown %1$d is the seconds left and %2$d the percentage of the duty allowance spent. The

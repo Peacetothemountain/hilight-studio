@@ -2,6 +2,30 @@
 
 All notable changes to HiLight Studio are documented here.
 
+## [Unreleased]
+
+## [1.0.10-experimental] - 2026-08-29
+
+- Bumped the privileged renderer implementation revision to 5 so Shizuku, ADB, and root restart an
+  older revision instead of silently reusing the released v1.0.9 renderer.
+- Made cleanup readback treat nonzero RGB as shadowing, RGB-dark but inexact ARGB as Binder-accepted
+  and unverified, and only an exact ARGB match as framework-effective. This changes diagnostics only;
+  LED writes, cleanup attempts, session release, and timing remain unchanged.
+- Ignored late state deliveries after renderer shutdown so they cannot mutate release revisions,
+  re-arm cleanup without a render thread, or restart the privacy observer.
+- Made the app picker include installed packages remembered from named notifications, even when they
+  have no launcher activity. Forgetting remembered chats removes these extra picker entries.
+- Made notification and while-open rules discoverably coexist for the same app, and added a safe
+  **Copy settings to another app** action for whole-app rules without carrying chat or keyword data.
+- Added exact typed entry to time-slider value pills. Typed seconds reject non-finite values and are
+  clamped to the slider's currently unlocked range, so duration safety confirmations still apply.
+- Added a five-second delayed self-test notification so the screen can be locked before it posts.
+- Added **Only while the phone is face down** as both a global guard and an option on individual
+  notification rules. The first use requires a shared **Needs testing — use with care** acknowledgement.
+  A foreground service watches the gravity/accelerometer signal with hysteresis and a settling window;
+  missing, stale, or unavailable readings fail closed and leave the LED array fully off. Lifting the
+  phone cancels a gated alert through the normal renderer release path.
+
 ## [1.0.9-experimental] - 2026-08-29
 
 - Added a bounded stuck-LED mitigation. After the existing pre-release black sequence, the renderer

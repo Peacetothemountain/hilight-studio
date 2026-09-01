@@ -2,6 +2,7 @@ package com.hilight.studio
 
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -76,21 +77,40 @@ fun ruleLabel(rule: AppRule): String =
 
 data class InstalledApp(val pkg: String, val label: String, val info: ApplicationInfo?)
 
+private data class RuleEditorState(val rule: AppRule, val isNew: Boolean)
+
 /** "Show X for app Y" rules, plus the per-chat rules nested under the app they belong to. */
 @Composable
 fun AppRulesScreen(store: Store) {
+    val ctx = LocalContext.current
     val rules by store.rules.collectAsStateWithLifecycle()
     val privacyRules by store.privacyRules.collectAsStateWithLifecycle()
     val conversations by store.conversations.collectAsStateWithLifecycle()
     val lastMatch by store.lastMatch.collectAsStateWithLifecycle()
+    val faceDownNoticeAccepted by store.faceDownNoticeAccepted.collectAsStateWithLifecycle()
+    val faceDownState by store.faceDownState.collectAsStateWithLifecycle()
+    val faceDownSensorAvailable = remember(ctx) { ForegroundWatcher.hasFaceDownSensor(ctx) }
     var picking by remember { mutableStateOf(false) }
     var scoping by remember { mutableStateOf<InstalledApp?>(null) }
     var pickingChatIn by remember { mutableStateOf<InstalledApp?>(null) }
-    var editing by remember { mutableStateOf<AppRule?>(null) }
+    var editing by remember { mutableStateOf<RuleEditorState?>(null) }
+    var copyingFrom by remember { mutableStateOf<AppRule?>(null) }
     var editingPrivacy by remember { mutableStateOf<PrivacyRule?>(null) }
     var choosingPrivacyActivity by remember { mutableStateOf(false) }
     var privacyPrefilledApp by remember { mutableStateOf<InstalledApp?>(null) }
     var pickingPrivacyAppFor by remember { mutableStateOf<PrivacyActivity?>(null) }
+    val learnedPackages = remember(conversations) {
+        conversations.mapTo(mutableSetOf()) { it.pkg }
+    }
+
+    val startWholeAppRule: (InstalledApp) -> Unit = { app ->
+        val draft = nextWholeAppRule(app.pkg, app.label, rules)
+        if (draft == null) {
+            Toast.makeText(ctx, R.string.rules_both_triggers_exist, Toast.LENGTH_SHORT).show()
+        } else {
+            editing = RuleEditorState(draft, isNew = true)
+        }
+    }
 
     PixelCard(tone = 2) {
         SectionTitle(stringResource(R.string.rules_section_title))
@@ -128,7 +148,7 @@ fun AppRulesScreen(store: Store) {
                     chat = knownConversation(rule, conversations),
                     lastMatchedMs = lastMatch[rule.id],
                     onToggle = { store.upsertRule(rule.copy(enabled = it)) },
-                    onEdit = { editing = rule },
+                    onEdit = { editing = RuleEditorState(rule, isNew = false) },
                     onTest = {
                         // test what the rule will actually do, including how long it stays lit
                         store.preview(
@@ -155,13 +175,14 @@ fun AppRulesScreen(store: Store) {
 
     if (picking) {
         AppPickerDialog(
+            alsoOffer = learnedPackages,
             onDismiss = { picking = false },
             onPick = { app ->
                 picking = false
                 // The scope step only appears where a per-chat rule could actually fire, so the
                 // ordinary "flash for this app" rule still costs one tap for everything else.
                 if (offersConversations(store, app)) scoping = app
-                else editing = AppRule(pkg = app.pkg, label = app.label)
+                else startWholeAppRule(app)
             },
         )
     }
@@ -173,7 +194,7 @@ fun AppRulesScreen(store: Store) {
             onPick = { scope ->
                 scoping = null
                 when (scope) {
-                    RuleScope.WHOLE_APP -> editing = AppRule(pkg = app.pkg, label = app.label)
+                    RuleScope.WHOLE_APP -> startWholeAppRule(app)
                     RuleScope.ONE_CHAT -> pickingChatIn = app
                 }
             },
@@ -199,14 +220,17 @@ fun AppRulesScreen(store: Store) {
                 )
                 // A chat that already has a rule opens that rule instead of a blank one. Both share
                 // an id, so saving the blank one would overwrite the colour already chosen for them.
-                editing = rules.firstOrNull { it.id == fresh.id } ?: fresh
+                val stored = rules.firstOrNull { it.id == fresh.id }
+                editing = RuleEditorState(stored ?: fresh, isNew = stored == null)
             },
         )
     }
 
-    editing?.let { rule ->
+    editing?.let { editor ->
+        val rule = editor.rule
         RuleEditorDialog(
             rule = rule,
+            isNew = editor.isNew,
             // The whole rule set travels into the editor because rule identity is derived from
             // fields the editor can change, so only the list can say whether the rule being saved
             // is about to land on top of a different one.
@@ -221,11 +245,34 @@ fun AppRulesScreen(store: Store) {
                 editing = null
             },
             onTest = { store.preview(it.pattern, it.color, it.speedMs, it.brightness, it.durationMs) },
+            faceDownNoticeAccepted = faceDownNoticeAccepted,
+            faceDownSensorAvailable = faceDownSensorAvailable,
+            faceDownState = faceDownState,
+            onAcceptFaceDownNotice = store::acceptFaceDownNotice,
+            onCopy = if (editor.isNew || rule.isConversationRule) null else ({ draft ->
+                editing = null
+                copyingFrom = draft
+            }),
             onAddPrivacy = if (rule.isConversationRule || rule.isCatchAll) null else ({
                 editing = null
                 privacyPrefilledApp = InstalledApp(rule.pkg, rule.label, null)
                 choosingPrivacyActivity = true
             }),
+        )
+    }
+
+    copyingFrom?.let { source ->
+        AppPickerDialog(
+            alsoOffer = learnedPackages,
+            excludePackage = source.pkg,
+            onDismiss = { copyingFrom = null },
+            onPick = { app ->
+                copyingFrom = null
+                editing = RuleEditorState(
+                    copyWholeAppRule(source, app.pkg, app.label),
+                    isNew = true,
+                )
+            },
         )
     }
 
@@ -251,6 +298,7 @@ fun AppRulesScreen(store: Store) {
 
     pickingPrivacyAppFor?.let { activity ->
         AppPickerDialog(
+            alsoOffer = learnedPackages,
             onDismiss = { pickingPrivacyAppFor = null },
             onPick = { app ->
                 pickingPrivacyAppFor = null
@@ -421,19 +469,35 @@ private fun RuleCard(
 }
 
 @Composable
-fun AppPickerDialog(onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
+fun AppPickerDialog(
+    onDismiss: () -> Unit,
+    onPick: (InstalledApp) -> Unit,
+    /** Packages learned from named notifications, beyond those with a launcher activity. */
+    alsoOffer: Set<String> = emptySet(),
+    /** Used by Copy settings so the source cannot be selected as its own destination. */
+    excludePackage: String? = null,
+) {
     val ctx = LocalContext.current
     var query by remember { mutableStateOf("") }
-    val apps by produceState(initialValue = emptyList<InstalledApp>()) {
+    val apps by produceState(initialValue = emptyList<InstalledApp>(), alsoOffer, excludePackage) {
         value = withContext(Dispatchers.IO) {
             val pm = ctx.packageManager
             val launchable = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            pm.queryIntentActivities(launchable, 0)
+            val launcherApps = pm.queryIntentActivities(launchable, 0)
                 .mapNotNull { ri ->
                     val ai = ri.activityInfo?.applicationInfo ?: return@mapNotNull null
                     InstalledApp(ai.packageName, pm.getApplicationLabel(ai).toString(), ai)
                 }
+            val launcherPackages = launcherApps.mapTo(mutableSetOf()) { it.pkg }
+            val learnedOnly = (alsoOffer - launcherPackages).mapNotNull { pkg ->
+                runCatching {
+                    val ai = pm.getApplicationInfo(pkg, 0)
+                    InstalledApp(pkg, pm.getApplicationLabel(ai).toString(), ai)
+                }.getOrNull()
+            }
+            (launcherApps + learnedOnly)
                 .distinctBy { it.pkg }
+                .filterNot { it.pkg == excludePackage }
                 .sortedBy { it.label.lowercase() }
         }
     }
@@ -461,23 +525,25 @@ fun AppPickerDialog(onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
                 val shown = apps.filter { it.label.contains(query, ignoreCase = true) }
                 LazyColumn(Modifier.heightIn(max = 380.dp)) {
                     // a rule that covers every app without one of its own
-                    item(key = AppRule.ANY_APP) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onPick(InstalledApp(AppRule.ANY_APP, anyAppLabel, null))
+                    if (excludePackage != AppRule.ANY_APP) {
+                        item(key = AppRule.ANY_APP) {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onPick(InstalledApp(AppRule.ANY_APP, anyAppLabel, null))
+                                    }
+                                    .padding(vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Rounded.Apps, contentDescription = null)
                                 }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        ) {
-                            Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Rounded.Apps, contentDescription = null)
-                            }
-                            Column {
-                                Text(anyAppLabel, style = MaterialTheme.typography.bodyLarge)
-                                Caption(stringResource(R.string.rules_any_app_caption))
+                                Column {
+                                    Text(anyAppLabel, style = MaterialTheme.typography.bodyLarge)
+                                    Caption(stringResource(R.string.rules_any_app_caption))
+                                }
                             }
                         }
                     }
@@ -530,26 +596,31 @@ private fun AppIcon(app: InstalledApp) {
 @Composable
 private fun RuleEditorDialog(
     rule: AppRule,
+    isNew: Boolean,
     existing: List<AppRule>,
     chatIsGroup: Boolean,
     onDismiss: () -> Unit,
     onSave: (AppRule) -> Unit,
     onTest: (AppRule) -> Unit,
+    faceDownNoticeAccepted: Boolean,
+    faceDownSensorAvailable: Boolean,
+    faceDownState: FaceDownState,
+    onAcceptFaceDownNotice: () -> Unit,
+    onCopy: ((AppRule) -> Unit)?,
     onAddPrivacy: (() -> Unit)?,
 ) {
     var r by remember { mutableStateOf(rule) }
+    var confirmingFaceDown by remember { mutableStateOf(false) }
 
     /*
      * Whether saving would land on a rule other than the one being edited.
      *
-     * Compared against [rule] by value rather than by id: the id is precisely what is moving, so an
-     * id test cannot tell "this is still me" from "this is somebody else". Anything in the list that
-     * shares the destination id and is not the rule this dialog opened on is a rule about to be
-     * overwritten — the trigger having been switched to one the app already has, a cleared chat id
-     * colliding with a name-matched rule, or a blank rule opened for an app that already has one.
+     * A new copy has no saved identity of its own, so every occupied destination is a replacement,
+     * even when all of its values happen to equal the saved rule. An edit may still occupy its own
+     * id without warning.
      */
-    val replacesAnother = remember(r.id, rule, existing) {
-        existing.any { it.id == r.id && it != rule }
+    val replacesAnother = remember(r.id, rule, existing, isNew) {
+        replacesExistingRule(existing, r, rule, isNew)
     }
 
     AlertDialog(
@@ -613,6 +684,7 @@ private fun RuleEditorDialog(
                         label = { if (it == Trigger.NOTIFICATION) onNotification else whileOpen },
                         onSelect = { r = r.copy(trigger = it) },
                     )
+                    Caption(stringResource(R.string.rules_trigger_pair_hint))
                 }
 
                 PatternCarousel(
@@ -667,6 +739,47 @@ private fun RuleEditorDialog(
                     ) {
                         r = r.copy(onlyWhenScreenOff = it)
                     }
+                    ToggleRow(
+                        label = stringResource(R.string.rules_only_face_down),
+                        checked = r.onlyWhenFaceDown,
+                        // Keep a restored/copied rule switchable off if this phone lacks the sensor.
+                        enabled = faceDownSensorAvailable || r.onlyWhenFaceDown,
+                    ) { wanted ->
+                        when {
+                            !wanted -> r = r.copy(onlyWhenFaceDown = false)
+                            faceDownNoticeAccepted -> r = r.copy(onlyWhenFaceDown = true)
+                            else -> confirmingFaceDown = true
+                        }
+                    }
+                    Caption(stringResource(R.string.face_down_caution))
+                    if (!faceDownSensorAvailable) {
+                        Caption(stringResource(R.string.face_down_no_sensor))
+                    } else if (r.onlyWhenFaceDown && !isNew) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Caption(stringResource(R.string.face_down_status_label))
+                            LivePill(
+                                text = stringResource(
+                                    when (faceDownState) {
+                                        FaceDownState.INACTIVE -> R.string.face_down_state_inactive
+                                        FaceDownState.STARTING -> R.string.face_down_state_starting
+                                        FaceDownState.CHECKING -> R.string.face_down_state_checking
+                                        FaceDownState.FACE_DOWN -> R.string.face_down_state_face_down
+                                        FaceDownState.NOT_FACE_DOWN ->
+                                            R.string.face_down_state_not_face_down
+                                        FaceDownState.UNAVAILABLE ->
+                                            R.string.face_down_state_unavailable
+                                        FaceDownState.STALE -> R.string.face_down_state_stale
+                                        FaceDownState.START_FAILED ->
+                                            R.string.face_down_state_start_failed
+                                    }
+                                ),
+                                ok = faceDownState == FaceDownState.FACE_DOWN,
+                            )
+                        }
+                    }
                 }
                 if (r.pattern.usesSpeed) {
                     PixelSlider(
@@ -674,6 +787,7 @@ private fun RuleEditorDialog(
                         r.speedMs.toFloat(),
                         150f..5000f,
                         { r = r.copy(speedMs = it.toInt()) },
+                        typeInSeconds = true,
                     ) { formatDuration(it.toInt()) }
                     r.pattern.cycleMeaningRes?.let { Caption(stringResource(it)) }
                 }
@@ -684,6 +798,12 @@ private fun RuleEditorDialog(
 
                 FilledTonalButton(onClick = { onTest(r) }, modifier = Modifier.fillMaxWidth()) {
                     ButtonLabel(stringResource(R.string.rules_test_on_leds))
+                }
+
+                if (onCopy != null) {
+                    TextButton(onClick = { onCopy(r) }, modifier = Modifier.fillMaxWidth()) {
+                        ButtonLabel(stringResource(R.string.rules_copy_settings))
+                    }
                 }
 
                 if (onAddPrivacy != null) {
@@ -701,6 +821,17 @@ private fun RuleEditorDialog(
             }
         },
     )
+
+    if (confirmingFaceDown) {
+        FaceDownConsentDialog(
+            onAccepted = {
+                onAcceptFaceDownNotice()
+                r = r.copy(onlyWhenFaceDown = true)
+                confirmingFaceDown = false
+            },
+            onDismiss = { confirmingFaceDown = false },
+        )
+    }
 }
 
 /**

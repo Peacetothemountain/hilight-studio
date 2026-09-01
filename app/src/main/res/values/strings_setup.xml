@@ -31,6 +31,7 @@
          same words said of the same thing. -->
     <string name="setup_dark_title">When to stay dark</string>
     <string name="setup_screen_off_only">Only while the screen is off</string>
+    <string name="setup_face_down_only">Only while the phone is face down</string>
     <!-- Both take a 24-hour clock time, which is formatted in code because it carries no words. -->
     <string name="setup_quiet_from">From %1$s</string>
     <string name="setup_quiet_until">Until %1$s</string>
@@ -140,6 +141,8 @@
     <string name="setup_test_title">End-to-end test</string>
     <string name="setup_test_body">Posts a notification from this app. Add a rule for HiLight Studio first.</string>
     <string name="setup_test_button">Post test notification</string>
+    <string name="setup_test_delay_button">Post in 5 seconds</string>
+    <string name="setup_test_countdown">Posting in %1$ds…</string>
     <string name="setup_selftest_channel">Self test</string>
     <string name="setup_selftest_title">HiLight self test</string>
     <string name="setup_selftest_body">If a rule exists for this app, the LEDs just fired</string>

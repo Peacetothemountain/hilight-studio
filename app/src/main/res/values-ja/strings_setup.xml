@@ -41,6 +41,8 @@
     <string name="setup_dark_title">消灯する条件</string>
     <!-- "Only while the screen is off" -->
     <string name="setup_screen_off_only">画面消灯時のみ</string>
+    <!-- "Only while the phone is face down" -->
+    <string name="setup_face_down_only">端末を伏せたときのみ</string>
     <!-- "From %1$s" — %1$s is a 24-hour clock time -->
     <string name="setup_quiet_from">開始 %1$s</string>
     <!-- "Until %1$s" -->
@@ -223,6 +225,10 @@
     <string name="setup_test_body">このアプリから通知を送信します。先に HiLight Studio のルールを追加してください。</string>
     <!-- "Post test notification" -->
     <string name="setup_test_button">テスト通知を送信</string>
+    <!-- "Post in 5 seconds" -->
+    <string name="setup_test_delay_button">5 秒後に送信</string>
+    <!-- "Posting in %1$ds…" -->
+    <string name="setup_test_countdown">あと%1$d秒で送信…</string>
     <!-- "Self test" -->
     <string name="setup_selftest_channel">セルフテスト</string>
     <!-- "HiLight self test" -->

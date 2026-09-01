@@ -194,6 +194,7 @@ fun LiveScreen(store: Store) {
                         Suppression.LOW_BATTERY -> R.string.live_suppressed_low_battery
                         Suppression.POWER_SAVER -> R.string.live_suppressed_power_saver
                         Suppression.SCREEN_ON -> R.string.live_suppressed_screen_on
+                        Suppression.NOT_FACE_DOWN -> R.string.live_suppressed_not_face_down
                     }
                 )
             )

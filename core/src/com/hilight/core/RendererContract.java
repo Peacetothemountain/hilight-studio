@@ -15,7 +15,7 @@ public final class RendererContract {
     public static final int CONTRACT_VERSION = 1;
 
     /** Monotonic revision of code loaded into the privileged renderer process. */
-    public static final int IMPLEMENTATION_REVISION = 4;
+    public static final int IMPLEMENTATION_REVISION = 5;
 
     /** Version of the JSON status document emitted by {@link Engine#status()}. */
     public static final int STATUS_SCHEMA_VERSION = 6;
@@ -30,9 +30,9 @@ public final class RendererContract {
     /**
      * Version passed to Shizuku for the daemon lifecycle.
      *
-     * <p>Revision values occupy the final two decimal digits. Thus APK code 10 and renderer
-     * revision 4 request service version 1004, which cannot reuse v1.0.8's service version 9 or any
-     * pre-final v1.0.9 candidate exercised during device regression testing.</p>
+     * <p>Revision values occupy the final two decimal digits. Thus APK code 11 and renderer
+     * revision 5 request service version 1105, which cannot reuse released v1.0.9 service version
+     * 1004, v1.0.8 service version 9, or the discarded v1.0.9 service-1005 candidate.</p>
      */
     public static int shizukuServiceVersion(int appVersionCode) {
         if (appVersionCode <= 0) {

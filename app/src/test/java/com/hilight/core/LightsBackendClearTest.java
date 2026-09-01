@@ -65,6 +65,32 @@ public final class LightsBackendClearTest {
     }
 
     @Test
+    public void alphaNormalizedReadbackRemainsBinderAcceptedUnverified() {
+        Rig rig = new Rig(LEDS);
+        rig.io.fixedReadback = 0xFF000000;
+
+        assertEquals(
+                LightsBackend.ClearResult.BINDER_ACCEPTED_UNVERIFIED,
+                rig.lights.forceBlack()
+        );
+
+        assertEquals(LightsBackend.ClearResult.BINDER_ACCEPTED_UNVERIFIED,
+                rig.lights.lastClearAttemptResult());
+        assertTrue(rig.io.reads > 0);
+        assertTrue(rig.lights.isBlackClearPending());
+    }
+
+    @Test
+    public void anyNonzeroRgbReadbackRemainsShadowed() {
+        Rig rig = new Rig(LEDS);
+        rig.io.fixedReadback = 0x00000001;
+
+        assertEquals(LightsBackend.ClearResult.SHADOWED, rig.lights.forceBlack());
+        assertEquals(LightsBackend.ClearResult.SHADOWED,
+                rig.lights.lastClearAttemptResult());
+    }
+
+    @Test
     public void visibleReadbackIsShadowedAndAllShadowedPassesEndExhausted() {
         Rig rig = new Rig(LEDS);
         rig.io.fixedReadback = 0xFFFF0000;

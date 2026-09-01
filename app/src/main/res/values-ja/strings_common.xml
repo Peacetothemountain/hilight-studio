@@ -74,6 +74,23 @@
     <string name="suppression_power_saver">バッテリーセーバー</string>
     <!-- "Screen-off only" -->
     <string name="suppression_screen_on">画面消灯時のみ</string>
+    <!-- "Face-down only" -->
+    <string name="suppression_not_face_down">伏せたときのみ</string>
+
+    <!-- Shared first-use warning and live sensor states for both face-down entry points. -->
+    <string name="face_down_notice_title">テストが必要です — 注意して使用してください</string>
+    <string name="face_down_notice_body">端末によって位置センサーの動作が異なります。このオプションの使用中は、端末の向きを確認し続けるため、HiLight の低優先度の通知が表示されます。センサーを使用できない場合や読み取りが古くなった場合、HiLight は完全に消灯したままです。</string>
+    <string name="face_down_caution">テストが必要です — 注意して使用してください。端末の向きを監視している間は、HiLight の低優先度の通知が表示されます。</string>
+    <string name="face_down_no_sensor">使用できる位置センサーがないため、このオプションは有効にできません。</string>
+    <string name="face_down_status_label">端末の向き</string>
+    <string name="face_down_state_inactive">停止中</string>
+    <string name="face_down_state_starting">開始中</string>
+    <string name="face_down_state_checking">確認中</string>
+    <string name="face_down_state_face_down">伏せています</string>
+    <string name="face_down_state_not_face_down">伏せていません</string>
+    <string name="face_down_state_unavailable">センサーなし</string>
+    <string name="face_down_state_stale">読み取り停止</string>
+    <string name="face_down_state_start_failed">開始できません</string>
 
     <!-- How the renderer is reached -->
     <!-- "Auto" -->
@@ -96,6 +113,9 @@
     <string name="duration_minutes">%1$d分</string>
     <!-- "%1$dm %2$ds" -->
     <string name="duration_minutes_seconds">%1$d分%2$d秒</string>
+    <!-- "Seconds" — typed duration field label -->
+    <string name="duration_seconds_field">秒</string>
+    <string name="duration_edit_seconds_action">正確な秒数を入力</string>
 
     <!-- Buttons and labels used on more than one screen -->
     <!-- "Cancel" -->

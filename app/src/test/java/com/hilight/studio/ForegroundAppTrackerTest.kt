@@ -51,17 +51,34 @@ class ForegroundAppTrackerTest {
     }
 
     @Test
-    fun `watcher runs only for enabled while-open rules`() {
+    fun `watcher plan separates foreground and face down work`() {
         val foreground = AppRule(
             pkg = "com.discord",
             label = "Discord",
             trigger = Trigger.FOREGROUND,
         )
         val notification = foreground.copy(trigger = Trigger.NOTIFICATION)
+        val faceDownNotification = notification.copy(onlyWhenFaceDown = true)
 
-        assertTrue(ForegroundWatchPolicy.shouldRun(true, listOf(foreground)))
-        assertFalse(ForegroundWatchPolicy.shouldRun(false, listOf(foreground)))
-        assertFalse(ForegroundWatchPolicy.shouldRun(true, listOf(foreground.copy(enabled = false))))
-        assertFalse(ForegroundWatchPolicy.shouldRun(true, listOf(notification)))
+        assertEquals(
+            ForegroundWatchPlan(trackForegroundApps = true, trackFaceDown = false),
+            ForegroundWatchPolicy.plan(true, listOf(foreground), globalFaceDownOnly = false),
+        )
+        assertEquals(
+            ForegroundWatchPlan(trackForegroundApps = false, trackFaceDown = true),
+            ForegroundWatchPolicy.plan(true, listOf(faceDownNotification), false),
+        )
+        assertEquals(
+            ForegroundWatchPlan(trackForegroundApps = true, trackFaceDown = true),
+            ForegroundWatchPolicy.plan(true, listOf(foreground), globalFaceDownOnly = true),
+        )
+        assertFalse(ForegroundWatchPolicy.plan(false, listOf(foreground), true).shouldRun)
+        assertFalse(
+            ForegroundWatchPolicy.plan(
+                true,
+                listOf(foreground.copy(enabled = false), notification),
+                false,
+            ).shouldRun
+        )
     }
 }

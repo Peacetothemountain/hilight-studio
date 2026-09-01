@@ -158,6 +158,32 @@ public final class EngineReleaseTest {
     }
 
     @Test
+    public void lateStateAfterStopCannotMutateRevisionsOrArmManualCleanup() throws Exception {
+        Rig rig = new Rig();
+        rig.clock.autoAdvanceMs = LightsBackend.CLEANUP_RETRY_MS;
+        Engine engine = rig.newEngine();
+        engine.stop();
+        JSONObject stopped = new JSONObject(engine.status());
+
+        engine.setState("{\"enabled\":false,\"stateRevision\":91,"
+                + "\"manualBlackClearRequestId\":7}");
+
+        JSONObject afterLateState = new JSONObject(engine.status());
+        assertEquals(
+                stopped.getLong("receivedStateRevision"),
+                afterLateState.getLong("receivedStateRevision")
+        );
+        assertEquals(
+                stopped.getLong("appliedStateRevision"),
+                afterLateState.getLong("appliedStateRevision")
+        );
+        assertEquals(0, afterLateState.getLong("lastSeenManualBlackClearRequestId"));
+        assertEquals(0, afterLateState.getLong("lastAcceptedManualBlackClearRequestId"));
+        assertFalse(afterLateState.getBoolean("blackClearPending"));
+        assertFalse(afterLateState.getBoolean("session"));
+    }
+
+    @Test
     public void receivedIdleRevisionIsNotReleasedUntilTheRenderThreadSettlesIt() throws Exception {
         Rig rig = new Rig();
         rig.finishStartupCycle();

@@ -13,6 +13,8 @@ package com.hilight.studio
 data class GuardState(
     val screenOffOnly: Boolean = false,
     val screenOn: Boolean = false,
+    val faceDownOnly: Boolean = false,
+    val faceDown: Boolean = false,
     val quietEnabled: Boolean = false,
     val quietDim: Boolean = false,
     val inQuietWindow: Boolean = false,
@@ -41,6 +43,7 @@ data class GuardState(
      * phone, is the entire point of them.
      */
     fun alertSuppression(): Suppression? {
+        if (faceDownOnly && !faceDown) return Suppression.NOT_FACE_DOWN
         // a dimmed quiet window is not a suppression: it still lights, just far lower
         if (quietEnabled && !quietDim && inQuietWindow) return Suppression.QUIET_HOURS
         // Battery Saver is a direct request to stop spending power on extras, so it outranks the
@@ -50,4 +53,17 @@ data class GuardState(
         if (batteryGuard && batteryPct < batteryMinPct) return Suppression.LOW_BATTERY
         return null
     }
+}
+
+/** Manual finite previews bypass only the face-down gate; every power/safety guard still applies. */
+internal fun GuardState.outputSuppression(
+    hasTransientAlert: Boolean,
+    activeAlertSource: AlertSource?,
+): Suppression? {
+    val effective = if (activeAlertSource == AlertSource.PREVIEW) {
+        copy(faceDownOnly = false)
+    } else {
+        this
+    }
+    return if (hasTransientAlert) effective.alertSuppression() else effective.suppression()
 }

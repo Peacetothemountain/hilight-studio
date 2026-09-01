@@ -574,23 +574,29 @@ public final class LightsBackend {
     }
 
     private ProbeResult probeColor(int expectedColor) {
-        boolean unavailable = false;
+        boolean inconclusive = false;
         for (int id : ids) {
             Integer color;
             try {
                 color = io.get(id);
             } catch (Exception e) {
                 Log.w("getLightState failed: " + e);
-                unavailable = true;
+                inconclusive = true;
                 continue;
             }
             if (color == null) {
-                unavailable = true;
+                inconclusive = true;
                 continue;
             }
-            if (color != expectedColor) return ProbeResult.SHADOWED;
+            // LightState alpha is ignored by the hardware and may be normalized on readback.
+            // Only an RGB mismatch can prove that another framework state may illuminate the LEDs.
+            if ((color & 0x00FFFFFF) != (expectedColor & 0x00FFFFFF)) {
+                return ProbeResult.SHADOWED;
+            }
+            // RGB-dark but inexact readback is safe, yet cannot prove our exact framework state.
+            if (color != expectedColor) inconclusive = true;
         }
-        return unavailable ? ProbeResult.UNAVAILABLE : ProbeResult.EFFECTIVE;
+        return inconclusive ? ProbeResult.UNAVAILABLE : ProbeResult.EFFECTIVE;
     }
 
     private ClearResult retryCleanupClose() {

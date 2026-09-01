@@ -94,7 +94,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Drives the HiLight LEDs from the foreground app" />
+                android:value="Monitors foreground apps and phone orientation for user-configured HiLight rules" />
         </service>
     </application>
 </manifest>

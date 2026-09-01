@@ -24,6 +24,8 @@ import android.util.Log
  */
 class ForegroundWatcher : Service() {
 
+    internal enum class SyncResult { STARTING_OR_RUNNING, STOPPED, FAILED }
+
     private lateinit var thread: HandlerThread
     private lateinit var handler: Handler
     private val main = Handler(Looper.getMainLooper())
@@ -32,6 +34,8 @@ class ForegroundWatcher : Service() {
     private val foreground = ForegroundAppTracker()
     private var queriedThroughMs = Long.MIN_VALUE
     @Volatile private var forceRefresh = true
+    @Volatile private var plan = ForegroundWatchPlan(false, false)
+    private lateinit var faceDownTracker: FaceDownSensorTracker
 
     /**
      * Set on the main thread when the service is going away.
@@ -41,10 +45,11 @@ class ForegroundWatcher : Service() {
      * Checking this on the main thread, where the override is also cleared, keeps a late tick from
      * re-applying an override with no watcher left alive to ever clear it.
      */
-    private var stopped = false
+    @Volatile private var stopped = false
 
     private val tick = object : Runnable {
         override fun run() {
+            if (!plan.trackForegroundApps) return
             val pkg = currentForegroundPackage()
             if (forceRefresh || pkg != lastPkg) {
                 forceRefresh = false
@@ -58,7 +63,7 @@ class ForegroundWatcher : Service() {
                     }
                 }
             }
-            handler.postDelayed(this, POLL_MS)
+            if (plan.trackForegroundApps) handler.postDelayed(this, POLL_MS)
         }
     }
 
@@ -66,25 +71,74 @@ class ForegroundWatcher : Service() {
         super.onCreate()
         thread = HandlerThread("fg-watch").also { it.start() }
         handler = Handler(thread.looper)
-        startForeground(1, notification())
-        handler.post(tick)
+        faceDownTracker = FaceDownSensorTracker(this, handler) { state, sampleElapsedMs ->
+            // Sensor callbacks can already be queued while the service is tearing down. Mirror the
+            // foreground-app path's stopped guard so a retired watcher cannot publish late state.
+            main.post {
+                if (!stopped) store.updateFaceDownSensorState(state, sampleElapsedMs)
+            }
+        }
+        startForeground(NOTIFICATION_ID, notification(plan))
     }
 
     override fun onDestroy() {
         stopped = true
+        // The listener is registered on this looper, so unregister it before asking the thread to quit.
+        faceDownTracker.stop()
         handler.removeCallbacksAndMessages(null)
         thread.quitSafely()
-        main.post { store.setForegroundOverride(null, null) }
+        main.post {
+            store.setForegroundOverride(null, null)
+            store.updateFaceDownSensorState(FaceDownState.INACTIVE, 0L)
+        }
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        applyPlan(
+            intent?.let(::planFromIntent) ?: store.foregroundWatchPlan()
+        )
+        return START_STICKY
+    }
+
+    private fun applyPlan(next: ForegroundWatchPlan) {
+        val prior = plan
+        plan = next
+        startForeground(NOTIFICATION_ID, notification(next))
+
         // syncRunning also calls start when the service already exists. Re-evaluate the same package
         // so enabling or editing its rule cannot be ignored just because the app did not change.
         forceRefresh = true
-        return START_STICKY
+        handler.removeCallbacks(tick)
+        if (next.trackForegroundApps) {
+            handler.post(tick)
+        } else if (prior.trackForegroundApps) {
+            foreground.clear()
+            lastPkg = null
+            queriedThroughMs = Long.MIN_VALUE
+            main.post { if (!stopped) store.setForegroundOverride(null, null) }
+        }
+
+        if (prior.trackFaceDown != next.trackFaceDown) {
+            handler.post {
+                if (stopped) return@post
+                if (plan.trackFaceDown) {
+                    faceDownTracker.start()
+                    // Close the tiny race where teardown began after the check above but while
+                    // SensorManager was registering the listener.
+                    if (stopped) faceDownTracker.stop()
+                } else {
+                    faceDownTracker.stop()
+                    main.post {
+                        if (!stopped) {
+                            store.updateFaceDownSensorState(FaceDownState.INACTIVE, 0L)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun currentForegroundPackage(): String? {
@@ -116,7 +170,7 @@ class ForegroundWatcher : Service() {
         return foreground.currentPackage()
     }
 
-    private fun notification(): Notification {
+    private fun notification(plan: ForegroundWatchPlan): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         // A Service has no composition, so getString rather than stringResource. CHANNEL is the id
         // the notification is registered under and is never read by a person; the name beside it is
@@ -130,7 +184,16 @@ class ForegroundWatcher : Service() {
         )
         return Notification.Builder(this, CHANNEL)
             .setContentTitle(getString(R.string.service_watcher_title))
-            .setContentText(getString(R.string.service_watcher_text))
+            .setContentText(
+                getString(
+                    when {
+                        plan.trackForegroundApps && plan.trackFaceDown ->
+                            R.string.service_watcher_text_both
+                        plan.trackFaceDown -> R.string.service_watcher_text_face_down
+                        else -> R.string.service_watcher_text
+                    }
+                )
+            )
             .setSmallIcon(R.drawable.hilight_logo)
             .setOngoing(true)
             .build()
@@ -138,18 +201,37 @@ class ForegroundWatcher : Service() {
 
     companion object {
         private const val CHANNEL = "fg_watch"
+        private const val NOTIFICATION_ID = 1
+        private const val EXTRA_FOREGROUND = "trackForegroundApps"
+        private const val EXTRA_FACE_DOWN = "trackFaceDown"
         private const val POLL_MS = 1000L
         private const val QUERY_OVERLAP_MS = 2_000L
         private const val BOOTSTRAP_LOOKBACK_MS = 24 * 60 * 60_000L
 
-        /** Starts or stops the watcher to match the current rule set. */
-        fun syncRunning(ctx: Context, rules: List<AppRule>, enabled: Boolean) {
-            val needed = ForegroundWatchPolicy.shouldRun(enabled, rules)
+        /** Starts or stops the watcher to match one authoritative work plan. */
+        internal fun syncRunning(ctx: Context, plan: ForegroundWatchPlan): SyncResult {
             val intent = Intent(ctx, ForegroundWatcher::class.java)
-            runCatching {
-                if (needed) ctx.startForegroundService(intent) else ctx.stopService(intent)
-            }.onFailure { Log.w("HiLightForeground", "could not update foreground watcher", it) }
+                .putExtra(EXTRA_FOREGROUND, plan.trackForegroundApps)
+                .putExtra(EXTRA_FACE_DOWN, plan.trackFaceDown)
+            return runCatching {
+                if (plan.shouldRun) {
+                    ctx.startForegroundService(intent)
+                    SyncResult.STARTING_OR_RUNNING
+                } else {
+                    ctx.stopService(intent)
+                    SyncResult.STOPPED
+                }
+            }.onFailure {
+                Log.w("HiLightForeground", "could not update foreground watcher", it)
+            }.getOrDefault(SyncResult.FAILED)
         }
+
+        private fun planFromIntent(intent: Intent): ForegroundWatchPlan = ForegroundWatchPlan(
+            trackForegroundApps = intent.getBooleanExtra(EXTRA_FOREGROUND, false),
+            trackFaceDown = intent.getBooleanExtra(EXTRA_FACE_DOWN, false),
+        )
+
+        fun hasFaceDownSensor(ctx: Context): Boolean = FaceDownSensorTracker.hasSensor(ctx)
 
         fun hasUsageAccess(ctx: Context): Boolean {
             val appOps = ctx.getSystemService(AppOpsManager::class.java) ?: return false

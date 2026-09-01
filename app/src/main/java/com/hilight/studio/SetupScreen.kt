@@ -35,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -156,6 +157,10 @@ fun SetupScreen(store: Store) {
     val quietDim by store.quietDim.collectAsStateWithLifecycle()
     val quietDimPct by store.quietDimPct.collectAsStateWithLifecycle()
     val screenOffOnly by store.screenOffOnly.collectAsStateWithLifecycle()
+    val faceDownOnly by store.faceDownOnly.collectAsStateWithLifecycle()
+    val faceDownNoticeAccepted by store.faceDownNoticeAccepted.collectAsStateWithLifecycle()
+    val faceDownState by store.faceDownState.collectAsStateWithLifecycle()
+    val faceDownSensorAvailable = remember(ctx) { ForegroundWatcher.hasFaceDownSensor(ctx) }
 
     var notifAccess by remember { mutableStateOf(hasNotificationAccess(ctx)) }
     var usageAccess by remember { mutableStateOf(ForegroundWatcher.hasUsageAccess(ctx)) }
@@ -163,6 +168,8 @@ fun SetupScreen(store: Store) {
     var forgetting by remember { mutableStateOf(false) }
     var checkingForUpdates by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
+    var selfTestCountdown by remember { mutableIntStateOf(0) }
+    var confirmingFaceDown by remember { mutableStateOf(false) }
     val updateScope = rememberCoroutineScope()
     val conversations by store.conversations.collectAsStateWithLifecycle()
 
@@ -215,6 +222,44 @@ fun SetupScreen(store: Store) {
         ToggleRow(stringResource(R.string.setup_screen_off_only), screenOffOnly) {
             store.setScreenOffOnly(it)
         }
+        ToggleRow(
+            label = stringResource(R.string.setup_face_down_only),
+            checked = faceDownOnly,
+            // A restored setting still has to be switchable off on hardware without this sensor.
+            enabled = faceDownSensorAvailable || faceDownOnly,
+        ) { wanted ->
+            when {
+                !wanted -> store.setFaceDownOnly(false)
+                faceDownNoticeAccepted -> store.setFaceDownOnly(true)
+                else -> confirmingFaceDown = true
+            }
+        }
+        Caption(stringResource(R.string.face_down_caution))
+        if (!faceDownSensorAvailable) {
+            Caption(stringResource(R.string.face_down_no_sensor))
+        } else if (faceDownOnly) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Caption(stringResource(R.string.face_down_status_label))
+                LivePill(
+                    text = stringResource(
+                        when (faceDownState) {
+                            FaceDownState.INACTIVE -> R.string.face_down_state_inactive
+                            FaceDownState.STARTING -> R.string.face_down_state_starting
+                            FaceDownState.CHECKING -> R.string.face_down_state_checking
+                            FaceDownState.FACE_DOWN -> R.string.face_down_state_face_down
+                            FaceDownState.NOT_FACE_DOWN -> R.string.face_down_state_not_face_down
+                            FaceDownState.UNAVAILABLE -> R.string.face_down_state_unavailable
+                            FaceDownState.STALE -> R.string.face_down_state_stale
+                            FaceDownState.START_FAILED -> R.string.face_down_state_start_failed
+                        }
+                    ),
+                    ok = faceDownState == FaceDownState.FACE_DOWN,
+                )
+            }
+        }
         // The toggle and the suppression pill above say the same two words about the same thing, so
         // they share the one string.
         ToggleRow(stringResource(R.string.suppression_quiet_hours), quietEnabled) {
@@ -255,6 +300,17 @@ fun SetupScreen(store: Store) {
             ) { stringResource(R.string.setup_percent, it.toInt()) }
             Caption(stringResource(R.string.setup_battery_note))
         }
+    }
+
+    if (confirmingFaceDown) {
+        FaceDownConsentDialog(
+            onAccepted = {
+                store.acceptFaceDownNotice()
+                store.setFaceDownOnly(true)
+                confirmingFaceDown = false
+            },
+            onDismiss = { confirmingFaceDown = false },
+        )
     }
 
     val rootPresent = rootState in setOf(
@@ -442,8 +498,44 @@ fun SetupScreen(store: Store) {
     PixelCard {
         SectionTitle(stringResource(R.string.setup_test_title))
         Caption(stringResource(R.string.setup_test_body))
-        FilledTonalButton(onClick = { postSelfTestNotification(ctx) }) {
-            ButtonLabel(stringResource(R.string.setup_test_button))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FilledTonalButton(
+                onClick = { postSelfTestNotification(ctx.applicationContext) },
+                enabled = selfTestCountdown == 0,
+                modifier = Modifier.weight(1f),
+            ) {
+                ButtonLabel(stringResource(R.string.setup_test_button))
+            }
+            TextButton(
+                onClick = {
+                    // State changes synchronously, so a second queued tap cannot launch another job
+                    // before Compose has redrawn the disabled button.
+                    if (selfTestCountdown != 0) return@TextButton
+                    selfTestCountdown = 5
+                    val appContext = ctx.applicationContext
+                    updateScope.launch {
+                        try {
+                            for (remaining in 5 downTo 1) {
+                                selfTestCountdown = remaining
+                                delay(1_000)
+                            }
+                            postSelfTestNotification(appContext)
+                        } finally {
+                            selfTestCountdown = 0
+                        }
+                    }
+                },
+                enabled = selfTestCountdown == 0,
+                modifier = Modifier.weight(1f),
+            ) {
+                ButtonLabel(
+                    if (selfTestCountdown > 0) {
+                        stringResource(R.string.setup_test_countdown, selfTestCountdown)
+                    } else {
+                        stringResource(R.string.setup_test_delay_button)
+                    }
+                )
+            }
         }
     }
 

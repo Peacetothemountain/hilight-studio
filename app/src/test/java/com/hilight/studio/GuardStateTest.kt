@@ -12,6 +12,52 @@ class GuardStateTest {
     }
 
     @Test
+    fun `face down gate defaults off and fails closed when enabled`() {
+        assertNull(GuardState(faceDown = false).suppression())
+        assertEquals(
+            Suppression.NOT_FACE_DOWN,
+            GuardState(faceDownOnly = true, faceDown = false).suppression(),
+        )
+        assertNull(GuardState(faceDownOnly = true, faceDown = true).suppression())
+    }
+
+    @Test
+    fun `global face down gate covers notification and privacy suppression`() {
+        val state = GuardState(faceDownOnly = true, faceDown = false)
+
+        assertEquals(Suppression.NOT_FACE_DOWN, state.alertSuppression())
+    }
+
+    @Test
+    fun `screen off explanation keeps its existing priority`() {
+        assertEquals(
+            Suppression.SCREEN_ON,
+            GuardState(
+                screenOffOnly = true,
+                screenOn = true,
+                faceDownOnly = true,
+                faceDown = false,
+            ).suppression(),
+        )
+    }
+
+    @Test
+    fun `manual preview bypasses only face down gate`() {
+        val faceGate = GuardState(faceDownOnly = true, faceDown = false)
+        val batteryGate = faceGate.copy(batteryPct = 1)
+
+        assertNull(faceGate.outputSuppression(true, AlertSource.PREVIEW))
+        assertEquals(
+            Suppression.NOT_FACE_DOWN,
+            faceGate.outputSuppression(true, AlertSource.NOTIFICATION),
+        )
+        assertEquals(
+            Suppression.LOW_BATTERY,
+            batteryGate.outputSuppression(true, AlertSource.PREVIEW),
+        )
+    }
+
+    @Test
     fun `battery saver pauses the array at any level`() {
         assertEquals(
             Suppression.POWER_SAVER,

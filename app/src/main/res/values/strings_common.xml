@@ -49,6 +49,22 @@
     <string name="suppression_low_battery">Low battery</string>
     <string name="suppression_power_saver">Battery Saver</string>
     <string name="suppression_screen_on">Screen-off only</string>
+    <string name="suppression_not_face_down">Face-down only</string>
+
+    <!-- Shared first-use warning and live sensor states for both face-down entry points. -->
+    <string name="face_down_notice_title">Needs testing — use with care</string>
+    <string name="face_down_notice_body">Phone position sensors behave differently across devices. While this option is in use, HiLight shows a low-priority notification so it can keep checking the phone’s position. If the sensor is unavailable or its reading becomes stale, HiLight stays fully off.</string>
+    <string name="face_down_caution">Needs testing — use with care. HiLight shows a low-priority notification while it watches the phone’s position.</string>
+    <string name="face_down_no_sensor">No suitable position sensor is available, so this option cannot be enabled.</string>
+    <string name="face_down_status_label">Phone position</string>
+    <string name="face_down_state_inactive">inactive</string>
+    <string name="face_down_state_starting">starting</string>
+    <string name="face_down_state_checking">checking</string>
+    <string name="face_down_state_face_down">face down</string>
+    <string name="face_down_state_not_face_down">not face down</string>
+    <string name="face_down_state_unavailable">sensor unavailable</string>
+    <string name="face_down_state_stale">reading stale</string>
+    <string name="face_down_state_start_failed">could not start</string>
 
     <!-- How the renderer is reached -->
     <string name="transport_auto">Auto</string>
@@ -63,6 +79,8 @@
     <string name="duration_seconds">%1$ds</string>
     <string name="duration_minutes">%1$dm</string>
     <string name="duration_minutes_seconds">%1$dm %2$ds</string>
+    <string name="duration_seconds_field">Seconds</string>
+    <string name="duration_edit_seconds_action">Enter exact seconds</string>
 
     <!-- Buttons and labels used on more than one screen -->
     <string name="common_cancel">Cancel</string>

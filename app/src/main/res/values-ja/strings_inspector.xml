@@ -103,10 +103,12 @@
     <!-- The foreground watcher's ongoing notification, and the channel it sits on. Both are read in
          the system notification settings and the shade, so they are as short as Android's own. -->
     <!-- "HiLight app watcher" -->
-    <string name="service_watcher_channel_name">HiLight のアプリ監視</string>
+    <string name="service_watcher_channel_name">HiLight のバックグラウンド監視</string>
     <!-- "HiLight Studio" — product name, not translated -->
     <string name="service_watcher_title">HiLight Studio</string>
     <!-- "Watching for apps with light rules" — shade text, so a fragment with no full stop -->
     <string name="service_watcher_text">点灯ルールのあるアプリを監視中</string>
+    <string name="service_watcher_text_face_down">端末が伏せられているか監視中</string>
+    <string name="service_watcher_text_both">点灯ルールのアプリと端末の向きを監視中</string>
 
 </resources>
