@@ -1,5 +1,6 @@
 package com.hilight.studio
 
+import android.widget.Toast
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +67,32 @@ val PRESET_COLORS = listOf(
     0xFFFF1744, 0xFFFF6D00, 0xFFFFD600, 0xFF00E676, 0xFF00E5FF,
     0xFF2979FF, 0xFF7C4DFF, 0xFFFF4081, 0xFFFFFFFF, 0xFFFF80AB,
 ).map { it.toInt() }
+
+internal typealias PreviewLauncher = (Pattern, Int, Int, Float, Int) -> Unit
+
+/** Launches every in-app preview through one truthful guard check without adding UI controls. */
+@Composable
+internal fun rememberPreviewLauncher(store: Store): PreviewLauncher {
+    val context = LocalContext.current.applicationContext
+    val resources = LocalResources.current
+    return remember(store, context, resources) {
+        { pattern, color, speedMs, brightness, durationMs ->
+            val reason = store.previewSuppressionReason()
+            if (reason == null) {
+                store.preview(pattern, color, speedMs, brightness, durationMs)
+            } else {
+                Toast.makeText(
+                    context,
+                    resources.getString(
+                        R.string.test_blocked_by_guard,
+                        resources.getString(reason.shortRes),
+                    ),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+    }
+}
 
 /**
  * Swatches plus hue / saturation / intensity.

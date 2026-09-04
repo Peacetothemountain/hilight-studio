@@ -118,6 +118,7 @@ private fun tileAccent(pattern: Pattern, color: Int): Color = when {
 /** Home surface: the phone itself, the master switch, and one-tap effects. */
 @Composable
 fun LiveScreen(store: Store) {
+    val launchPreview = rememberPreviewLauncher(store)
     val enabled by store.enabled.collectAsStateWithLifecycle()
     val ambient by store.ambient.collectAsStateWithLifecycle()
     val status by store.status.collectAsStateWithLifecycle()
@@ -211,39 +212,35 @@ fun LiveScreen(store: Store) {
     // Android 17 8-LED Flashlight with animated beam & color spectrum long-press
     Android17FlashlightCard(store = store)
 
-    // Google Pixel Native Stock & Dynamic Effects
-    val tests: List<Pair<Int, ImageVector>> = listOf(
-        R.string.live_effect_assistant to Icons.Rounded.GraphicEq,
-        R.string.live_effect_timer to Icons.Rounded.Timer,
-        R.string.live_effect_camera to Icons.Rounded.CameraAlt,
-        R.string.live_effect_battery to Icons.Rounded.BatteryChargingFull,
-        R.string.live_effect_call to Icons.Rounded.Call,
-        R.string.live_effect_notify to Icons.Rounded.NotificationsActive,
-        Pattern.RAINBOW.shortLabelRes to Icons.Rounded.AutoAwesome,
-        R.string.live_effect_sunset to Icons.Rounded.WbSunny,
-        R.string.live_effect_cyber to Icons.Rounded.FlashOn,
-        R.string.live_test_random to Icons.Rounded.Casino,
-        Pattern.COMET.shortLabelRes to Icons.Rounded.Flare,
-        Pattern.WAVE.shortLabelRes to Icons.Rounded.Waves,
+    // Each tile borrows its pattern's own name, so the label is a string resource id. Random is the
+    // exception: a third of a row is too narrow for "Random colours".
+    val tests: List<Triple<Int, ImageVector, Pair<Pattern, Int>>> = listOf(
+        Triple(Pattern.RAINBOW.shortLabelRes, Icons.Rounded.AutoAwesome, Pattern.RAINBOW to 0xFFFFFFFF.toInt()),
+        Triple(R.string.live_test_random, Icons.Rounded.Casino, Pattern.RANDOM to 0xFFFFFFFF.toInt()),
+        // tile accents are chosen for legibility; the effect colours themselves are above
+        Triple(Pattern.COMET.shortLabelRes, Icons.Rounded.Flare, Pattern.COMET to 0xFF00E5FF.toInt()),
+        Triple(Pattern.PULSE.shortLabelRes, Icons.Rounded.Bolt, Pattern.PULSE to 0xFFFF1744.toInt()),
+        Triple(Pattern.BREATHE.shortLabelRes, Icons.Rounded.Nightlight, Pattern.BREATHE to 0xFF7C4DFF.toInt()),
+        Triple(Pattern.WAVE.shortLabelRes, Icons.Rounded.Waves, Pattern.WAVE to 0xFF00E676.toInt()),
     )
 
     PixelCard {
         SectionTitle(stringResource(R.string.live_tests_title))
         Caption(stringResource(R.string.live_tests_caption))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            tests.chunked(2).forEach { row ->
+            tests.chunked(3).forEach { row ->
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    row.forEach { (labelRes, icon) ->
+                    row.forEach { (labelRes, icon, spec) ->
                         PixelTile(
                             label = stringResource(labelRes),
                             icon = icon,
-                            accent = MaterialTheme.colorScheme.primary,
+                            accent = tileAccent(spec.first, spec.second),
                             enabled = enabled && status.alive,
                             modifier = Modifier.weight(1f),
-                        ) { store.preview(Pattern.RANDOM, 0xFFFFFFFF.toInt(), 1200, 1f) }
+                        ) { launchPreview(spec.first, spec.second, 1200, 1f, 4_000) }
                     }
                 }
             }
