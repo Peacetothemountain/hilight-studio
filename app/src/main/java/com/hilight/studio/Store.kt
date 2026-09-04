@@ -1452,6 +1452,7 @@ class Store private constructor(private val app: Context) {
                     color = color,
                     brightness = brightness,
                 ),
+                source = AlertSource.PREVIEW,
             )
         } else {
             alertExpiry?.let { main.removeCallbacks(it) }
