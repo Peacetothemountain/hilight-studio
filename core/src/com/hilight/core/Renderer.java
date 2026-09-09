@@ -142,6 +142,66 @@ public final class Renderer {
                 break;
             }
 
+            case "candle": {
+                int candleBase = 0xFFFF7A00;
+                for (int i = 0; i < n; i++) {
+                    double seed = (t / 70.0) + (i * 13.37);
+                    double noise = (Math.sin(seed) * 0.5 + Math.sin(seed * 2.3) * 0.3 + Math.sin(seed * 5.7) * 0.2);
+                    double f = clamp01(0.50 + 0.50 * noise);
+                    out[i] = scale(candleBase, f);
+                }
+                break;
+            }
+
+            case "lightning": {
+                long cycle = t % 3500;
+                int flashColor = 0xFFDDEEFF;
+                if (cycle < 60 || (cycle > 110 && cycle < 160) || (cycle > 210 && cycle < 250)) {
+                    for (int i = 0; i < n; i++) out[i] = flashColor;
+                }
+                break;
+            }
+
+            case "police": {
+                long cycle = t % 600;
+                int red = 0xFFFF0000;
+                int blue = 0xFF0033FF;
+                if (cycle < 60 || (cycle > 120 && cycle < 180)) {
+                    for (int i = 0; i < n / 2; i++) out[i] = red;
+                } else if ((cycle > 300 && cycle < 360) || (cycle > 420 && cycle < 480)) {
+                    for (int i = n / 2; i < n; i++) out[i] = blue;
+                }
+                break;
+            }
+
+            case "tally": {
+                int tallyRed = 0xFFFF0000;
+                for (int i = 0; i < n; i++) out[i] = tallyRed;
+                break;
+            }
+
+            case "paparazzi": {
+                long slot = t / 65;
+                int activeLed = (int) ((slot * 17) % n);
+                out[activeLed] = 0xFFFFFFFF;
+                if (slot % 3 == 0) {
+                    int secondLed = (activeLed + 3) % n;
+                    out[secondLed] = 0xFFFFFFFF;
+                }
+                break;
+            }
+
+            case "catchlight": {
+                double pos = (t % 1600) / 1600.0 * n;
+                int catchColor = 0xFFFFFAEE;
+                for (int i = 0; i < n; i++) {
+                    double d = Math.abs(pos - i);
+                    if (d > n / 2.0) d = n - d;
+                    out[i] = scale(catchColor, Math.max(0, 1.0 - d / 1.5));
+                }
+                break;
+            }
+
             default:
                 for (int i = 0; i < n; i++) out[i] = palette[i % palette.length];
         }

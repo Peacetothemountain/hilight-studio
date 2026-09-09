@@ -1,4 +1,4 @@
-﻿package com.hilight.studio
+package com.hilight.studio
 
 import android.Manifest
 import android.content.Context
@@ -85,18 +85,35 @@ fun StudioFillLightCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 SectionTitle(stringResource(R.string.live_studio_title))
                 Caption(stringResource(R.string.live_studio_caption))
             }
-            // Swatch displaying Planckian blackbody chromaticity
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(currentColor)
-                    .border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Swatch displaying Planckian blackbody chromaticity
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(currentColor)
+                        .border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                )
+                // Dedicated Studio Fill-Light Power Switch
+                Switch(
+                    checked = isFlashActive,
+                    onCheckedChange = { active ->
+                        PixelHaptics.click(context)
+                        store.setFlashlight(
+                            active = active,
+                            color = CctUtils.kelvinToArgb(currentKelvin),
+                            brightness = brightness,
+                        )
+                    },
+                )
+            }
         }
 
         Spacer(Modifier.height(10.dp))
@@ -107,7 +124,6 @@ fun StudioFillLightCard(
             value = currentKelvin.toFloat(),
             range = 1900f..8000f,
             onChange = { k ->
-                PixelHaptics.tick(context)
                 store.setCctKelvin(k.toInt())
             },
             format = { "%.0fK".format(it) },
@@ -147,7 +163,13 @@ fun StudioFillLightCard(
                         .clickable {
                             PixelHaptics.click(context)
                             store.setCctKelvin(kelvin)
-                            if (!isFlashActive) store.setFlashlight(true)
+                            if (!isFlashActive) {
+                                store.setFlashlight(
+                                    active = true,
+                                    color = CctUtils.kelvinToArgb(kelvin),
+                                    brightness = brightness,
+                                )
+                            }
                         }
                         .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center,
@@ -170,7 +192,6 @@ fun StudioFillLightCard(
             value = brightness,
             range = 0.05f..1.0f,
             onChange = { b ->
-                PixelHaptics.tick(context)
                 store.setFlashlightBrightness(b)
             },
             format = { "%.0f%%".format(it * 100f) },
@@ -426,7 +447,6 @@ fun AudioVisualizerCard(
                     value = sensitivity,
                     range = 0.5f..2.5f,
                     onChange = { s ->
-                        PixelHaptics.tick(context)
                         store.setAudioSensitivity(s)
                     },
                     format = { "%.1fx".format(it) },

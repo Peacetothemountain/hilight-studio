@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import kotlin.math.abs
@@ -12,8 +13,8 @@ import kotlin.math.abs
 /**
  * Spatial Sensor Fusion Engine: Visor Tap Gesture Detector.
  *
- * Employs high-frequency accelerometer impulse filtering to detect direct physical double-taps
- * on the Pixel 11 Pro XL rear camera visor glass while the phone is face-down.
+ * Employs accelerometer impulse filtering to detect direct physical double-taps
+ * on the Pixel 11 Pro XL rear camera visor glass ONLY while the phone is face-down and screen is OFF.
  */
 class VisorTapDetector(
     private val context: Context,
@@ -23,6 +24,7 @@ class VisorTapDetector(
 
     private val tag = "VisorTapDetector"
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
     private val accelSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
         ?: sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
@@ -31,15 +33,15 @@ class VisorTapDetector(
     private var isListening = false
 
     companion object {
-        private const val TAP_IMPULSE_THRESHOLD = 2.4f // Acceleration spike along Z-axis
-        private const val MIN_TAP_INTERVAL_MS = 90L    // Debounce fast bounce
-        private const val MAX_TAP_INTERVAL_MS = 480L   // Maximum window for double tap
+        private const val TAP_IMPULSE_THRESHOLD = 5.0f // High threshold to prevent false positives
+        private const val MIN_TAP_INTERVAL_MS = 100L   // Debounce bounce
+        private const val MAX_TAP_INTERVAL_MS = 450L   // Window for double tap
     }
 
     fun start() {
         if (isListening || accelSensor == null) return
         try {
-            sensorManager?.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager?.registerListener(this, accelSensor, SensorManager.SENSOR_DELAY_NORMAL)
             isListening = true
             Log.i(tag, "VisorTapDetector registered on accelerometer")
         } catch (t: Throwable) {
@@ -58,7 +60,8 @@ class VisorTapDetector(
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event == null || !isFaceDownProvider()) return
+        // Never trigger when user is actively using the screen or not strictly face-down
+        if (event == null || powerManager?.isInteractive == true || !isFaceDownProvider()) return
 
         val z = event.values.getOrNull(2) ?: return
         val deltaZ = abs(z - lastZ)
@@ -69,12 +72,9 @@ class VisorTapDetector(
             val timeSinceLast = now - lastTapTimeMs
 
             if (timeSinceLast in MIN_TAP_INTERVAL_MS..MAX_TAP_INTERVAL_MS) {
-                // Verified Double Tap!
                 lastTapTimeMs = 0L
-                PixelHaptics.doubleClick(context)
                 onDoubleTap()
             } else if (timeSinceLast > MAX_TAP_INTERVAL_MS) {
-                // First tap candidate
                 lastTapTimeMs = now
             }
         }

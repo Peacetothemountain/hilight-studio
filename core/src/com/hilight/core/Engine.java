@@ -659,6 +659,12 @@ public final class Engine {
             case "wave":
             case "rainbow":
             case "random":
+            case "candle":
+            case "lightning":
+            case "police":
+            case "tally":
+            case "paparazzi":
+            case "catchlight":
                 return true;
             case "custom":
                 return cfg.optLong("rotateMs", 0) > 50;

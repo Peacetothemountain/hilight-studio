@@ -409,6 +409,28 @@ object Bridge {
         put("spread", true)
         put("randomIntervalMs", 500)
         put("randomPerLed", true)
+    }
+
+    /** Builds an alert payload for arbitrary or custom renderer pattern key. */
+    fun alertJson(
+        id: Long,
+        patternKey: String,
+        color: Int,
+        durationMs: Int,
+        speedMs: Int,
+        brightness: Float,
+        source: AlertSource,
+    ): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("pattern", patternKey)
+        put("color", color.toUInt().toLong())
+        put("durationMs", durationMs)
+        put("speedMs", speedMs)
+        put("brightness", brightness.toDouble())
+        put("source", source.key)
+        put("spread", true)
+        put("randomIntervalMs", 500)
+        put("randomPerLed", true)
         put("randomSmooth", true)
     }
 

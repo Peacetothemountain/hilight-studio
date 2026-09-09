@@ -395,21 +395,23 @@ class Store private constructor(private val app: Context) {
     private val _audioSensitivity = MutableStateFlow(prefs.getFloat("audioSensitivity", 1.0f))
     val audioSensitivity: StateFlow<Float> = _audioSensitivity.asStateFlow()
 
-    private val _visorTapEnabled = MutableStateFlow(prefs.getBoolean("visorTapEnabled", true))
+    private val _visorTapEnabled = MutableStateFlow(prefs.getBoolean("visorTapEnabled", false))
     val visorTapEnabled: StateFlow<Boolean> = _visorTapEnabled.asStateFlow()
+
+    private var lastVisorFrameTimeMs = 0L
 
     val audioVisualizerEngine = AudioVisualizerEngine(app) { colors, energies ->
         _audioEnergies.value = energies
         if (_audioVisualizerActive.value) {
-            setPerLedFrame(colors, 1.0f)
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastVisorFrameTimeMs >= 100L) {
+                lastVisorFrameTimeMs = now
+                setPerLedFrame(colors, 1.0f)
+            }
         }
     }
 
-    val cinemaFxEngine = CinemaFxEngine({ colors, brightness ->
-        if (_cinemaFxMode.value != CinemaFxEngine.Mode.OFF) {
-            setPerLedFrame(colors, brightness)
-        }
-    })
+    val cinemaFxEngine = CinemaFxEngine()
 
     val visorTapDetector = VisorTapDetector(app, { isFaceDownNow() }) {
         if (_visorTapEnabled.value) {
@@ -1569,13 +1571,16 @@ class Store private constructor(private val app: Context) {
         prefs.edit().putInt("cctKelvin", k).apply()
         val c = CctUtils.kelvinToArgb(k)
         setFlashlightColor(c)
+        if (_flashlightActive.value) {
+            setFlashlight(true, color = c, brightness = _flashlightBrightness.value)
+        }
     }
 
     /** Sets the Cinema Practical FX mode. */
     fun setCinemaFxMode(mode: CinemaFxEngine.Mode) {
         _cinemaFxMode.value = mode
+        cinemaFxEngine.setMode(mode)
         if (mode == CinemaFxEngine.Mode.OFF) {
-            cinemaFxEngine.stop()
             releaseAlert()
         } else {
             if (_audioVisualizerActive.value) {
@@ -1585,7 +1590,25 @@ class Store private constructor(private val app: Context) {
             if (_flashlightActive.value) {
                 _flashlightActive.value = false
             }
-            cinemaFxEngine.setMode(mode)
+            holdAlert(
+                alert = Bridge.alertJson(
+                    id = Bridge.nextAlertId(),
+                    patternKey = mode.id,
+                    color = mode.baseColor,
+                    durationMs = 0,
+                    speedMs = 1000,
+                    brightness = 1.0f,
+                    source = AlertSource.PREVIEW,
+                ),
+                durationMs = 0,
+                arm = true,
+                preview = Ambient(
+                    pattern = Pattern.SOLID,
+                    color = mode.baseColor,
+                    brightness = 1.0f,
+                ),
+                source = AlertSource.PREVIEW,
+            )
         }
     }
 
