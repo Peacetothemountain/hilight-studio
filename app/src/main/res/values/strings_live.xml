@@ -95,4 +95,26 @@
     <string name="live_effect_sunset">Sunset</string>
     <string name="live_effect_cyber">Cyberpunk</string>
 
+    <!-- Studio Lighting, CCT & Practical Cinematography -->
+    <string name="live_studio_title">Studio Fill-Light &amp; CCT</string>
+    <string name="live_studio_caption">Planckian blackbody color temperature key light &amp; practical FX</string>
+    <string name="live_cct_kelvin_label">Color Temperature</string>
+    <string name="live_cct_kelvin_value">%1$dK</string>
+    <string name="live_fx_title">Cinematic Practical FX</string>
+    <string name="live_fx_caption">Pre-programmed physical lighting effects for video shoots &amp; cameras</string>
+
+    <!-- Real-Time Audio DSP Visualizer -->
+    <string name="live_audio_title">Real-Time Music &amp; Audio Visualizer</string>
+    <string name="live_audio_caption">Sub-20ms 8-band FFT acoustic visualizer driven by system audio</string>
+    <string name="live_audio_toggle_on">Visualizer active · Streaming audio spectrum</string>
+    <string name="live_audio_toggle_off">Tap to start music visualizer</string>
+    <string name="live_audio_sensitivity">Audio Sensitivity</string>
+    <string name="live_audio_permission_required">Audio permission needed for system capture</string>
+    <string name="live_audio_permission_grant">Grant Permission</string>
+
+    <!-- Spatial Sensor Fusion Visor Tap -->
+    <string name="live_tap_title">Visor Glass Double-Tap</string>
+    <string name="live_tap_subtitle_on">Double-tap camera visor while face-down to toggle fill-light</string>
+    <string name="live_tap_subtitle_off">Double-tap gesture disabled</string>
+
 </resources>

@@ -212,6 +212,18 @@ fun LiveScreen(store: Store) {
     // Android 17 8-LED Flashlight with animated beam & color spectrum long-press
     Android17FlashlightCard(store = store)
 
+    // Pro Cinematography: Planckian CCT Fill-Light
+    StudioFillLightCard(store = store)
+
+    // Real-Time Audio DSP: 8-Band Low-Latency FFT Visualizer
+    AudioVisualizerCard(store = store)
+
+    // Filmmaker Practical Lighting Effects
+    CinemaPracticalFxCard(store = store)
+
+    // Spatial Sensor Fusion: Visor Double-Tap Trigger
+    VisorTapCard(store = store)
+
     // Each tile borrows its pattern's own name, so the label is a string resource id. Random is the
     // exception: a third of a row is too narrow for "Random colours".
     val tests: List<Triple<Int, ImageVector, Pair<Pattern, Int>>> = listOf(

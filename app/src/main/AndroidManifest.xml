@@ -16,6 +16,12 @@
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
 
+    <!-- Sensory Engine: Cirrus High-Definition Haptic actuator compositions -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Real-Time Audio DSP: Low-latency FFT sound & music visualizer for the 8-LED visor -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Shizuku transport: the user starts Shizuku once per boot, on-device via wireless
          debugging or from adb, and approves this app in Shizuku's own dialog. -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />

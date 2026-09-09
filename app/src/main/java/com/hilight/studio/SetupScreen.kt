@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -656,6 +657,7 @@ fun SetupScreen(store: Store) {
     }
 
     QuickSettingsTileCard(ctx)
+    WirelessAdbCard(ctx)
 
     if (inspecting) {
         NotificationInspectorDialog(store) { inspecting = false }
@@ -838,6 +840,30 @@ fun QuickSettingsTileCard(ctx: Context) {
             Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             ButtonLabel("Add HiLight Tile to Quick Settings")
+        }
+    }
+}
+
+@Composable
+fun WirelessAdbCard(ctx: Context) {
+    PixelCard {
+        SectionTitle("Wireless Debugging & On-Device Setup")
+        Caption("Run HiLight completely wire-free using Android 11+ Wireless Debugging without connecting to a computer.")
+        FilledTonalButton(
+            onClick = {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+                    ctx.startActivity(intent)
+                } catch (t: Throwable) {
+                    val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
+                    ctx.startActivity(intent)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            ButtonLabel("Open Developer Options")
         }
     }
 }

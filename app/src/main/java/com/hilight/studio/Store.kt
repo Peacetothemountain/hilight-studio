@@ -377,6 +377,46 @@ class Store private constructor(private val app: Context) {
     private val _flashlightBrightness = MutableStateFlow(prefs.getFloat("flashlightBrightness", 1f))
     val flashlightBrightness: StateFlow<Float> = _flashlightBrightness.asStateFlow()
 
+    private val _cctKelvin = MutableStateFlow(prefs.getInt("cctKelvin", 5600))
+    val cctKelvin: StateFlow<Int> = _cctKelvin.asStateFlow()
+
+    private val _cinemaFxMode = MutableStateFlow(CinemaFxEngine.Mode.OFF)
+    val cinemaFxMode: StateFlow<CinemaFxEngine.Mode> = _cinemaFxMode.asStateFlow()
+
+    private val _audioVisualizerActive = MutableStateFlow(false)
+    val audioVisualizerActive: StateFlow<Boolean> = _audioVisualizerActive.asStateFlow()
+
+    private val _audioVisualizerMode = MutableStateFlow(AudioDsp.VisualizerMode.SPECTRUM_8_BAND)
+    val audioVisualizerMode: StateFlow<AudioDsp.VisualizerMode> = _audioVisualizerMode.asStateFlow()
+
+    private val _audioEnergies = MutableStateFlow(FloatArray(AudioDsp.BANDS_COUNT))
+    val audioEnergies: StateFlow<FloatArray> = _audioEnergies.asStateFlow()
+
+    private val _audioSensitivity = MutableStateFlow(prefs.getFloat("audioSensitivity", 1.0f))
+    val audioSensitivity: StateFlow<Float> = _audioSensitivity.asStateFlow()
+
+    private val _visorTapEnabled = MutableStateFlow(prefs.getBoolean("visorTapEnabled", true))
+    val visorTapEnabled: StateFlow<Boolean> = _visorTapEnabled.asStateFlow()
+
+    val audioVisualizerEngine = AudioVisualizerEngine(app) { colors, energies ->
+        _audioEnergies.value = energies
+        if (_audioVisualizerActive.value) {
+            setPerLedFrame(colors, 1.0f)
+        }
+    }
+
+    val cinemaFxEngine = CinemaFxEngine({ colors, brightness ->
+        if (_cinemaFxMode.value != CinemaFxEngine.Mode.OFF) {
+            setPerLedFrame(colors, brightness)
+        }
+    })
+
+    val visorTapDetector = VisorTapDetector(app, { isFaceDownNow() }) {
+        if (_visorTapEnabled.value) {
+            toggleFlashlight()
+        }
+    }
+
     private val _presets = MutableStateFlow(loadPresets())
     val presets: StateFlow<List<Preset>> = _presets.asStateFlow()
 
@@ -518,6 +558,7 @@ class Store private constructor(private val app: Context) {
 
     init {
         Bridge.ensureFiles(app)
+        if (_visorTapEnabled.value) visorTapDetector.start()
         _suppression.value = suppressionNow()
         // cheap clock/battery watch: quiet hours start and battery drops must take effect on their own
         main.post(object : Runnable {
@@ -1372,6 +1413,15 @@ class Store private constructor(private val app: Context) {
         alertIsPreview = false
         _previewLook.value = null
         _flashlightActive.value = false
+        if (_cinemaFxMode.value != CinemaFxEngine.Mode.OFF) {
+            _cinemaFxMode.value = CinemaFxEngine.Mode.OFF
+            cinemaFxEngine.stop()
+        }
+        if (_audioVisualizerActive.value) {
+            _audioVisualizerActive.value = false
+            audioVisualizerEngine.stop()
+            _audioEnergies.value = FloatArray(AudioDsp.BANDS_COUNT)
+        }
         pushCurrent(arm = false)       // handing the layer back must not extend the ambient window
     }
 
@@ -1510,6 +1560,104 @@ class Store private constructor(private val app: Context) {
         if (_flashlightActive.value) {
             setFlashlight(true, color = _flashlightColor.value, brightness = b)
         }
+    }
+
+    /** Sets the CCT Kelvin temperature (1000K - 12000K) and updates flashlight color. */
+    fun setCctKelvin(kelvin: Int) {
+        val k = kelvin.coerceIn(1000, 12000)
+        _cctKelvin.value = k
+        prefs.edit().putInt("cctKelvin", k).apply()
+        val c = CctUtils.kelvinToArgb(k)
+        setFlashlightColor(c)
+    }
+
+    /** Sets the Cinema Practical FX mode. */
+    fun setCinemaFxMode(mode: CinemaFxEngine.Mode) {
+        _cinemaFxMode.value = mode
+        if (mode == CinemaFxEngine.Mode.OFF) {
+            cinemaFxEngine.stop()
+            releaseAlert()
+        } else {
+            if (_audioVisualizerActive.value) {
+                _audioVisualizerActive.value = false
+                audioVisualizerEngine.stop()
+            }
+            if (_flashlightActive.value) {
+                _flashlightActive.value = false
+            }
+            cinemaFxEngine.setMode(mode)
+        }
+    }
+
+    /** Toggles the real-time audio FFT visualizer on or off. */
+    fun toggleAudioVisualizer() {
+        setAudioVisualizerActive(!_audioVisualizerActive.value)
+    }
+
+    /** Controls the real-time audio FFT visualizer active state. */
+    fun setAudioVisualizerActive(active: Boolean) {
+        _audioVisualizerActive.value = active
+        if (active) {
+            if (_cinemaFxMode.value != CinemaFxEngine.Mode.OFF) {
+                _cinemaFxMode.value = CinemaFxEngine.Mode.OFF
+                cinemaFxEngine.stop()
+            }
+            if (_flashlightActive.value) {
+                _flashlightActive.value = false
+            }
+            audioVisualizerEngine.start()
+        } else {
+            audioVisualizerEngine.stop()
+            _audioEnergies.value = FloatArray(AudioDsp.BANDS_COUNT)
+            releaseAlert()
+        }
+    }
+
+    /** Sets the audio visualizer mapping mode. */
+    fun setAudioVisualizerMode(mode: AudioDsp.VisualizerMode) {
+        _audioVisualizerMode.value = mode
+        audioVisualizerEngine.mode = mode
+    }
+
+    /** Sets the audio visualizer gain sensitivity multiplier. */
+    fun setAudioSensitivity(sensitivity: Float) {
+        val s = sensitivity.coerceIn(0.2f, 3.0f)
+        _audioSensitivity.value = s
+        audioVisualizerEngine.sensitivity = s
+        prefs.edit().putFloat("audioSensitivity", s).apply()
+    }
+
+    /** Enables or disables the visor double-tap gesture. */
+    fun setVisorTapEnabled(enabled: Boolean) {
+        _visorTapEnabled.value = enabled
+        prefs.edit().putBoolean("visorTapEnabled", enabled).apply()
+        if (enabled) visorTapDetector.start() else visorTapDetector.stop()
+    }
+
+    /** Pushes an arbitrary 8-LED color array frame to the hardware visor. */
+    fun setPerLedFrame(colors: IntArray, brightness: Float = 1.0f) {
+        val colorList = colors.toList()
+        val alert = JSONObject().apply {
+            put("id", Bridge.nextAlertId())
+            put("mode", Pattern.CUSTOM.key)
+            put("pattern", Pattern.CUSTOM.key)
+            put("brightness", brightness.toDouble())
+            put("colors", JSONArray().also { a -> colors.forEach { a.put(it.toUInt().toLong()) } })
+            put("source", AlertSource.PREVIEW.key)
+            put("speedMs", 1000)
+            put("spread", false)
+        }
+        holdAlert(
+            alert = alert,
+            durationMs = 0,
+            arm = true,
+            preview = Ambient(
+                pattern = Pattern.CUSTOM,
+                perLed = colorList,
+                brightness = brightness,
+            ),
+            source = AlertSource.PREVIEW,
+        )
     }
 
     /** Battery level from the sticky broadcast — no receiver to keep alive. */
