@@ -57,6 +57,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -104,8 +111,39 @@ fun AppRulesScreen(store: Store) {
         conversations.mapTo(mutableSetOf()) { it.pkg }
     }
 
+    val suggestedApps by produceState<List<InstalledApp>>(emptyList(), rules) {
+        value = withContext(Dispatchers.IO) {
+            val pm = ctx.packageManager
+            val rulePkgs = rules.map { it.pkg }.toSet()
+            val list = mutableListOf<InstalledApp>()
+            for (pkg in listOf(
+                "com.whatsapp",
+                "org.telegram.messenger",
+                "org.thoughtcrime.securesms",
+                "com.google.android.apps.messaging",
+                "com.discord",
+                "com.Slack",
+                "com.spotify.music",
+                "com.google.android.gm",
+                "com.instagram.android",
+                "com.snapchat.android",
+                "com.reddit.frontpage",
+            )) {
+                if (pkg !in rulePkgs) {
+                    runCatching {
+                        val ai = pm.getApplicationInfo(pkg, 0)
+                        list.add(InstalledApp(pkg, pm.getApplicationLabel(ai).toString(), ai))
+                    }
+                }
+                if (list.size >= 6) break
+            }
+            list
+        }
+    }
+
     val startWholeAppRule: (InstalledApp) -> Unit = { app ->
-        val draft = nextWholeAppRule(app.pkg, app.label, rules)
+        val brandColor = BrandColors.detectColor(ctx, app.pkg)
+        val draft = nextWholeAppRule(app.pkg, app.label, rules, brandColor)
         if (draft == null) {
             Toast.makeText(ctx, R.string.rules_both_triggers_exist, Toast.LENGTH_SHORT).show()
         } else {
@@ -121,6 +159,31 @@ fun AppRulesScreen(store: Store) {
             Icon(Icons.Rounded.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             ButtonLabel(stringResource(R.string.rules_add))
+        }
+        if (suggestedApps.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Caption("Quick Setup")
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                suggestedApps.forEach { app ->
+                    Row(
+                        Modifier
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                            .clickable {
+                                if (offersConversations(store, app)) scoping = app
+                                else startWholeAppRule(app)
+                            }
+                            .padding(start = 6.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        AppPackageIcon(app.pkg, modifier = Modifier.size(24.dp))
+                        Text(app.label, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
         }
     }
 
@@ -153,7 +216,7 @@ fun AppRulesScreen(store: Store) {
                     onTest = {
                         // test what the rule will actually do, including how long it stays lit
                         launchPreview(
-                            rule.pattern, rule.color, rule.speedMs, rule.brightness, rule.durationMs,
+                            rule.pattern, rule.color, rule.speedMs, rule.brightness, rule.durationMs, rule.direction,
                         )
                     },
                     onDelete = { store.removeRule(rule) },
@@ -212,12 +275,14 @@ fun AppRulesScreen(store: Store) {
                 pickingChatIn = null
                 // The label stays the app's own and the chat travels beside it: the card shows the
                 // app as an overline above the chat, and the matcher needs the two kept apart.
+                val brandColor = BrandColors.detectColor(ctx, app.pkg)
                 val fresh = AppRule(
                     pkg = app.pkg,
                     label = app.label,
                     conversationKey = ref.key,
                     conversationName = ref.name,
                     conversationIsGroup = ref.isGroup,
+                    color = brandColor,
                 )
                 // A chat that already has a rule opens that rule instead of a blank one. Both share
                 // an id, so saving the blank one would overwrite the colour already chosen for them.
@@ -246,7 +311,7 @@ fun AppRulesScreen(store: Store) {
                 editing = null
             },
             onTest = {
-                launchPreview(it.pattern, it.color, it.speedMs, it.brightness, it.durationMs)
+                launchPreview(it.pattern, it.color, it.speedMs, it.brightness, it.durationMs, it.direction)
             },
             faceDownNoticeAccepted = faceDownNoticeAccepted,
             faceDownSensorAvailable = faceDownSensorAvailable,
@@ -373,12 +438,16 @@ private fun RuleCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (!rule.randomColor) {
-                    Box(
-                        Modifier
-                            .size(14.dp)
-                            .background(Color(rule.color), CircleShape)
-                    )
+                Box(contentAlignment = Alignment.BottomEnd) {
+                    AppPackageIcon(rule.pkg, modifier = Modifier.size(38.dp))
+                    if (!rule.randomColor) {
+                        Box(
+                            Modifier
+                                .size(13.dp)
+                                .background(Color(rule.color), CircleShape)
+                                .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                        )
+                    }
                 }
                 Column {
                     if (perChat) {
@@ -572,19 +641,57 @@ fun AppPickerDialog(
 }
 
 @Composable
-private fun AppIcon(app: InstalledApp) {
+fun AppPackageIcon(
+    pkg: String,
+    modifier: Modifier = Modifier.size(36.dp),
+) {
     val ctx = LocalContext.current
-    val bmp by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, app.pkg) {
-        val info = app.info ?: return@produceState
+    if (pkg == AppRule.ANY_APP) {
+        Box(
+            modifier = modifier
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Rounded.Apps,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    val bmp by produceState<ImageBitmap?>(null, pkg) {
         value = withContext(Dispatchers.IO) {
             runCatching {
-                ctx.packageManager.getApplicationIcon(info).toBitmap(80, 80).asImageBitmap()
+                ctx.packageManager.getApplicationIcon(pkg).toBitmap(80, 80).asImageBitmap()
             }.getOrNull()
         }
     }
-    Box(Modifier.size(32.dp)) {
-        bmp?.let { Image(it, contentDescription = null, modifier = Modifier.size(32.dp)) }
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (bmp != null) {
+            Image(bmp!!, contentDescription = null, modifier = Modifier.fillMaxSize())
+        } else {
+            Icon(
+                Icons.Rounded.Tune,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
+}
+
+@Composable
+private fun AppIcon(app: InstalledApp) {
+    AppPackageIcon(app.pkg, modifier = Modifier.size(32.dp))
 }
 
 /**
@@ -632,17 +739,23 @@ private fun RuleEditorDialog(
         onDismissRequest = onDismiss,
         shape = MaterialTheme.shapes.extraLarge,
         title = {
-            Text(
-                if (r.isConversationRule) {
-                    stringResource(
-                        R.string.rules_editor_title_chat,
-                        ruleLabel(r),
-                        r.conversationName.orEmpty(),
-                    )
-                } else {
-                    ruleLabel(r)
-                }
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                AppPackageIcon(r.pkg, modifier = Modifier.size(28.dp))
+                Text(
+                    if (r.isConversationRule) {
+                        stringResource(
+                            R.string.rules_editor_title_chat,
+                            ruleLabel(r),
+                            r.conversationName.orEmpty(),
+                        )
+                    } else {
+                        ruleLabel(r)
+                    }
+                )
+            }
         },
         confirmButton = {
             Button(onClick = { onSave(r) }) { ButtonLabel(stringResource(R.string.common_save)) }
@@ -664,6 +777,7 @@ private fun RuleEditorDialog(
                         color = r.color,
                         speedMs = r.speedMs,
                         brightness = r.brightness,
+                        direction = r.direction,
                     ),
                     heightDp = 38,
                 )
@@ -703,6 +817,12 @@ private fun RuleEditorDialog(
                 ) { r = r.copy(randomColor = it) }
                 if (!r.randomColor) {
                     ColorPicker(r.color, { r = r.copy(color = it) })
+                }
+                if (r.pattern.usesDirection) {
+                    DirectionSelector(
+                        selected = r.direction,
+                        onSelect = { r = r.copy(direction = it) },
+                    )
                 }
 
                 if (r.trigger == Trigger.NOTIFICATION) {

@@ -65,6 +65,12 @@
     <!-- "One trip through every hue, back to the start." -->
     <string name="cycle_rainbow">すべての色相を一巡して元に戻ります。</string>
 
+    <!-- Flow Directions -->
+    <string name="direction_label">フロー方向</string>
+    <string name="direction_forward">左から右</string>
+    <string name="direction_reverse">右から左</string>
+    <string name="direction_bilateral">センターアウト / 対称</string>
+
     <!-- Why the array is being held dark -->
     <!-- "Quiet hours" -->
     <string name="suppression_quiet_hours">サイレント時間</string>

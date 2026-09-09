@@ -13,6 +13,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -212,17 +213,6 @@ fun LiveScreen(store: Store) {
     // Android 17 8-LED Flashlight with animated beam & color spectrum long-press
     Android17FlashlightCard(store = store)
 
-    // Pro Cinematography: Planckian CCT Fill-Light
-    StudioFillLightCard(store = store)
-
-    // Real-Time Audio DSP: 8-Band Low-Latency FFT Visualizer
-    AudioVisualizerCard(store = store)
-
-    // Filmmaker Practical Lighting Effects
-    CinemaPracticalFxCard(store = store)
-
-    // Spatial Sensor Fusion: Visor Double-Tap Trigger
-    VisorTapCard(store = store)
 
     // Each tile borrows its pattern's own name, so the label is a string resource id. Random is the
     // exception: a third of a row is too narrow for "Random colours".
@@ -311,6 +301,7 @@ fun Android17FlashlightCard(
 ) {
     val active by store.flashlightActive.collectAsStateWithLifecycle()
     val color by store.flashlightColor.collectAsStateWithLifecycle()
+    val brightness by store.flashlightBrightness.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
     var showColorPicker by remember { mutableStateOf(false) }
 
@@ -348,7 +339,7 @@ fun Android17FlashlightCard(
                         showColorPicker = true
                     },
                 )
-                .padding(horizontal = 18.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -414,6 +405,40 @@ fun Android17FlashlightCard(
                         )
                     )
                 }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Color Swatch
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(currentColor)
+                        .clickable { showColorPicker = true }
+                )
+                androidx.compose.material3.Switch(
+                    checked = active,
+                    onCheckedChange = { store.setFlashlight(it) },
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = active,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Column(modifier = Modifier.padding(top = 10.dp)) {
+                PixelSlider(
+                    label = stringResource(R.string.widget_intensity),
+                    value = brightness,
+                    range = 0.05f..1.0f,
+                    onChange = { store.setFlashlightBrightness(it) },
+                    format = { "%.0f%%".format(it * 100f) },
+                )
             }
         }
     }

@@ -279,4 +279,8 @@
     <string name="setup_root_error_body">Root を起動できませんでした。再試行するか、別の設定方法を使用できます。</string>
     <string name="setup_root_retry">Root を再試行</string>
 
+    <!-- Battery Fuel Gauge -->
+    <string name="setup_charging_gauge_title">充電バッテリーバイザーゲージ</string>
+    <string name="setup_charging_gauge_body">充電器接続時に8個のバイザーLEDで現在のバッテリー残量を表示します。</string>
+
 </resources>

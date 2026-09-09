@@ -170,6 +170,7 @@ fun SetupScreen(store: Store) {
     val faceDownNoticeAccepted by store.faceDownNoticeAccepted.collectAsStateWithLifecycle()
     val faceDownState by store.faceDownState.collectAsStateWithLifecycle()
     val faceDownSensorAvailable = remember(ctx) { ForegroundWatcher.hasFaceDownSensor(ctx) }
+    val chargingGaugeEnabled by store.chargingGaugeEnabled.collectAsStateWithLifecycle()
     val glowSuppression = suppression?.takeIf {
         it.settingsSection() == SettingsSuppressionSection.GLOW
     }
@@ -263,6 +264,15 @@ fun SetupScreen(store: Store) {
                 stringResource(R.string.setup_warn_long_confirm_body),
             onChange = { store.setAmbientTimeoutMs(it) },
         )
+    }
+
+    PixelCard {
+        SectionTitle(stringResource(R.string.setup_charging_gauge_title))
+        Caption(stringResource(R.string.setup_charging_gauge_body))
+        ToggleRow(
+            label = stringResource(R.string.setup_charging_gauge_title),
+            checked = chargingGaugeEnabled,
+        ) { store.setChargingGaugeEnabled(it) }
     }
 
     PixelCard {

@@ -398,6 +398,7 @@ object Bridge {
         speedMs: Int,
         brightness: Float,
         source: AlertSource,
+        direction: Direction = Direction.FORWARD,
     ): JSONObject = JSONObject().apply {
         put("id", id)
         put("pattern", pattern.key)
@@ -409,6 +410,9 @@ object Bridge {
         put("spread", true)
         put("randomIntervalMs", 500)
         put("randomPerLed", true)
+        if (pattern.usesDirection) {
+            put("direction", direction.key)
+        }
     }
 
     /** Builds an alert payload for arbitrary or custom renderer pattern key. */
@@ -420,6 +424,7 @@ object Bridge {
         speedMs: Int,
         brightness: Float,
         source: AlertSource,
+        direction: String = "forward",
     ): JSONObject = JSONObject().apply {
         put("id", id)
         put("pattern", patternKey)
@@ -432,6 +437,7 @@ object Bridge {
         put("randomIntervalMs", 500)
         put("randomPerLed", true)
         put("randomSmooth", true)
+        put("direction", direction)
     }
 
     /** Monotonic-ish alert ids so the renderer can tell a new alert from a re-push. */

@@ -46,12 +46,25 @@ enum class Pattern(
     RANDOM("random", R.string.pattern_random, usesSpeed = false),
     CUSTOM("custom", R.string.pattern_custom, usesSpeed = false);
 
+    val usesDirection: Boolean get() = this == CHASE || this == COMET || this == WAVE
+
     /** The name to show where a third of a row is all there is. */
     @get:StringRes
     val shortLabelRes: Int get() = narrowLabelRes ?: labelRes
 
     companion object {
         fun of(key: String) = entries.firstOrNull { it.key == key } ?: SOLID
+    }
+}
+
+/** Flow direction across the visor LED array for moving patterns. */
+enum class Direction(val key: String, @StringRes val labelRes: Int) {
+    FORWARD("forward", R.string.direction_forward),
+    REVERSE("reverse", R.string.direction_reverse),
+    BILATERAL("bilateral", R.string.direction_bilateral);
+
+    companion object {
+        fun of(key: String) = entries.firstOrNull { it.key == key } ?: FORWARD
     }
 }
 
@@ -85,6 +98,7 @@ data class Ambient(
     val randomSmooth: Boolean = true,
     val randomSaturation: Float = 1f,
     val rotateMs: Int = 0,
+    val direction: Direction = Direction.FORWARD,
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("mode", pattern.key)
@@ -96,6 +110,9 @@ data class Ambient(
         put("randomSmooth", randomSmooth)
         put("randomSaturation", randomSaturation.toDouble())
         put("rotateMs", rotateMs)
+        if (pattern.usesDirection) {
+            put("direction", direction.key)
+        }
         when (pattern) {
             Pattern.CUSTOM, Pattern.GRADIENT -> put(
                 "colors",
@@ -121,6 +138,7 @@ data class Ambient(
             randomSmooth = o.optBoolean("randomSmooth", true),
             randomSaturation = o.optDouble("randomSaturation", 1.0).toFloat(),
             rotateMs = o.optInt("rotateMs", 0),
+            direction = Direction.of(o.optString("direction", "forward")),
         )
     }
 
@@ -138,6 +156,7 @@ data class Ambient(
         put("randomSmooth", randomSmooth)
         put("randomSaturation", randomSaturation.toDouble())
         put("rotateMs", rotateMs)
+        put("direction", direction.key)
     }
 }
 
@@ -178,6 +197,7 @@ data class AppRule(
      * for a rule that already names a group.
      */
     val conversationIsGroup: Boolean = false,
+    val direction: Direction = Direction.FORWARD,
 ) {
     /** The catch-all rule, which matches any app without one of its own. */
     val isCatchAll: Boolean get() = pkg == ANY_APP
@@ -212,6 +232,7 @@ data class AppRule(
         conversationName?.let { put("conversationName", it) }
         put("includeGroups", includeGroups)
         put("conversationIsGroup", conversationIsGroup)
+        put("direction", direction.key)
     }
 
     companion object {
@@ -237,6 +258,7 @@ data class AppRule(
             conversationName = o.optString("conversationName", "").takeIf { it.isNotEmpty() },
             includeGroups = o.optBoolean("includeGroups", false),
             conversationIsGroup = o.optBoolean("conversationIsGroup", false),
+            direction = Direction.of(o.optString("direction", "forward")),
         )
     }
 }

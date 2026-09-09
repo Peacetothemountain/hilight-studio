@@ -44,6 +44,12 @@
     <string name="cycle_wave">One wave travelling once across the array.</string>
     <string name="cycle_rainbow">One trip through every hue, back to the start.</string>
 
+    <!-- Flow Directions -->
+    <string name="direction_label">Flow direction</string>
+    <string name="direction_forward">Left to right</string>
+    <string name="direction_reverse">Right to left</string>
+    <string name="direction_bilateral">Bilateral / Center out</string>
+
     <!-- Why the array is being held dark -->
     <string name="suppression_quiet_hours">Quiet hours</string>
     <string name="test_blocked_by_guard">Test blocked: %1$s</string>

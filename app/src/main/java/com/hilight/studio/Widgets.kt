@@ -68,7 +68,24 @@ val PRESET_COLORS = listOf(
     0xFF2979FF, 0xFF7C4DFF, 0xFFFF4081, 0xFFFFFFFF, 0xFFFF80AB,
 ).map { it.toInt() }
 
-internal typealias PreviewLauncher = (Pattern, Int, Int, Float, Int) -> Unit
+internal fun interface PreviewLauncher {
+    fun launch(
+        pattern: Pattern,
+        color: Int,
+        speedMs: Int,
+        brightness: Float,
+        durationMs: Int,
+        direction: Direction,
+    )
+    operator fun invoke(
+        pattern: Pattern,
+        color: Int,
+        speedMs: Int,
+        brightness: Float,
+        durationMs: Int,
+        direction: Direction = Direction.FORWARD,
+    ) = launch(pattern, color, speedMs, brightness, durationMs, direction)
+}
 
 /** Launches every in-app preview through one truthful guard check without adding UI controls. */
 @Composable
@@ -76,10 +93,10 @@ internal fun rememberPreviewLauncher(store: Store): PreviewLauncher {
     val context = LocalContext.current.applicationContext
     val resources = LocalResources.current
     return remember(store, context, resources) {
-        { pattern, color, speedMs, brightness, durationMs ->
+        PreviewLauncher { pattern, color, speedMs, brightness, durationMs, direction ->
             val reason = store.previewSuppressionReason()
             if (reason == null) {
-                store.preview(pattern, color, speedMs, brightness, durationMs)
+                store.preview(pattern, color, speedMs, brightness, durationMs, direction)
             } else {
                 Toast.makeText(
                     context,

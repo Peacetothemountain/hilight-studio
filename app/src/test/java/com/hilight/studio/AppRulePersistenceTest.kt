@@ -27,4 +27,27 @@ class AppRulePersistenceTest {
 
         assertFalse(AppRule.fromJson(legacy).onlyWhenFaceDown)
     }
+
+    @Test
+    fun `rule direction survives preference round trip`() {
+        val original = AppRule(
+            pkg = "com.example",
+            label = "Example",
+            direction = Direction.BILATERAL,
+        )
+
+        org.junit.Assert.assertEquals(
+            Direction.BILATERAL,
+            AppRule.fromJson(original.toPrefsJson()).direction,
+        )
+    }
+
+    @Test
+    fun `older stored rules default direction to forward`() {
+        val legacy = JSONObject()
+            .put("pkg", "com.example")
+            .put("label", "Example")
+
+        org.junit.Assert.assertEquals(Direction.FORWARD, AppRule.fromJson(legacy).direction)
+    }
 }

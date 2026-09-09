@@ -86,25 +86,69 @@ public final class Renderer {
             }
 
             case "chase": {
-                int head = (int) ((t / Math.max(1, speed / n)) % n);
-                for (int i = 0; i < n; i++) out[i] = i == head ? palette[0] : 0xFF000000;
+                String dir = cfg.optString("direction", "forward");
+                if ("bilateral".equals(dir)) {
+                    int half = (n + 1) / 2;
+                    int step = (int) ((t / Math.max(1, speed / half)) % half);
+                    for (int i = 0; i < n; i++) {
+                        int distFromCenter = (int) Math.round(Math.abs(i - (n - 1.0) / 2.0) - 0.5);
+                        out[i] = (distFromCenter == step) ? palette[0] : 0xFF000000;
+                    }
+                } else if ("reverse".equals(dir)) {
+                    int head = (int) ((t / Math.max(1, speed / n)) % n);
+                    int revHead = (n - 1) - head;
+                    for (int i = 0; i < n; i++) out[i] = i == revHead ? palette[0] : 0xFF000000;
+                } else {
+                    int head = (int) ((t / Math.max(1, speed / n)) % n);
+                    for (int i = 0; i < n; i++) out[i] = i == head ? palette[0] : 0xFF000000;
+                }
                 break;
             }
 
             case "comet": {
-                double pos = (t % speed) / (double) speed * n;
-                for (int i = 0; i < n; i++) {
-                    double d = pos - i;
-                    if (d < 0) d += n;
-                    out[i] = scale(palette[i % palette.length], Math.max(0, 1 - d / 3.0));
+                double phase = (t % speed) / (double) speed;
+                String dir = cfg.optString("direction", "forward");
+                if ("bilateral".equals(dir)) {
+                    double half = n / 2.0;
+                    double pos = phase * half;
+                    for (int i = 0; i < n; i++) {
+                        double dist = Math.abs(i - (n - 1.0) / 2.0);
+                        double d = pos - dist;
+                        if (d < 0) d += half;
+                        out[i] = scale(palette[i % palette.length], Math.max(0, 1 - d / 1.5));
+                    }
+                } else if ("reverse".equals(dir)) {
+                    double pos = phase * n;
+                    for (int i = 0; i < n; i++) {
+                        double d = pos - ((n - 1) - i);
+                        if (d < 0) d += n;
+                        out[i] = scale(palette[i % palette.length], Math.max(0, 1 - d / 3.0));
+                    }
+                } else {
+                    double pos = phase * n;
+                    for (int i = 0; i < n; i++) {
+                        double d = pos - i;
+                        if (d < 0) d += n;
+                        out[i] = scale(palette[i % palette.length], Math.max(0, 1 - d / 3.0));
+                    }
                 }
                 break;
             }
 
             case "wave": {
                 double phase = (t % speed) / (double) speed;
+                String dir = cfg.optString("direction", "forward");
                 for (int i = 0; i < n; i++) {
-                    double k = (1 + Math.sin(2 * Math.PI * (phase + (double) i / n))) / 2;
+                    double posFraction;
+                    if ("reverse".equals(dir)) {
+                        posFraction = (double) (n - 1 - i) / n;
+                    } else if ("bilateral".equals(dir)) {
+                        double distFromCenter = Math.abs(i - (n - 1.0) / 2.0);
+                        posFraction = distFromCenter / ((n - 1.0) / 2.0);
+                    } else {
+                        posFraction = (double) i / n;
+                    }
+                    double k = (1 + Math.sin(2 * Math.PI * (phase + posFraction))) / 2;
                     out[i] = scale(palette[i % palette.length], 0.08 + 0.92 * k);
                 }
                 break;
@@ -139,66 +183,6 @@ public final class Renderer {
                 long rotateMs = cfg.optLong("rotateMs", 0);
                 int shift = rotateMs > 50 ? (int) ((t / rotateMs) % n) : 0;
                 for (int i = 0; i < n; i++) out[i] = palette[((i + shift) % n) % palette.length];
-                break;
-            }
-
-            case "candle": {
-                int candleBase = 0xFFFF7A00;
-                for (int i = 0; i < n; i++) {
-                    double seed = (t / 70.0) + (i * 13.37);
-                    double noise = (Math.sin(seed) * 0.5 + Math.sin(seed * 2.3) * 0.3 + Math.sin(seed * 5.7) * 0.2);
-                    double f = clamp01(0.50 + 0.50 * noise);
-                    out[i] = scale(candleBase, f);
-                }
-                break;
-            }
-
-            case "lightning": {
-                long cycle = t % 3500;
-                int flashColor = 0xFFDDEEFF;
-                if (cycle < 60 || (cycle > 110 && cycle < 160) || (cycle > 210 && cycle < 250)) {
-                    for (int i = 0; i < n; i++) out[i] = flashColor;
-                }
-                break;
-            }
-
-            case "police": {
-                long cycle = t % 600;
-                int red = 0xFFFF0000;
-                int blue = 0xFF0033FF;
-                if (cycle < 60 || (cycle > 120 && cycle < 180)) {
-                    for (int i = 0; i < n / 2; i++) out[i] = red;
-                } else if ((cycle > 300 && cycle < 360) || (cycle > 420 && cycle < 480)) {
-                    for (int i = n / 2; i < n; i++) out[i] = blue;
-                }
-                break;
-            }
-
-            case "tally": {
-                int tallyRed = 0xFFFF0000;
-                for (int i = 0; i < n; i++) out[i] = tallyRed;
-                break;
-            }
-
-            case "paparazzi": {
-                long slot = t / 65;
-                int activeLed = (int) ((slot * 17) % n);
-                out[activeLed] = 0xFFFFFFFF;
-                if (slot % 3 == 0) {
-                    int secondLed = (activeLed + 3) % n;
-                    out[secondLed] = 0xFFFFFFFF;
-                }
-                break;
-            }
-
-            case "catchlight": {
-                double pos = (t % 1600) / 1600.0 * n;
-                int catchColor = 0xFFFFFAEE;
-                for (int i = 0; i < n; i++) {
-                    double d = Math.abs(pos - i);
-                    if (d > n / 2.0) d = n - d;
-                    out[i] = scale(catchColor, Math.max(0, 1.0 - d / 1.5));
-                }
                 break;
             }
 

@@ -177,4 +177,8 @@
     <string name="setup_root_error_body">Root could not be started. You can retry or use another setup method.</string>
     <string name="setup_root_retry">Retry root</string>
 
+    <!-- Battery Fuel Gauge -->
+    <string name="setup_charging_gauge_title">Charging battery visor gauge</string>
+    <string name="setup_charging_gauge_body">Illuminate the 8 visor LEDs to show current battery level when charger is connected.</string>
+
 </resources>

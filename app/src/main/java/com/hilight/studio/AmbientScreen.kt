@@ -249,6 +249,16 @@ fun AmbientScreen(store: Store) {
                     Caption(stringResource(R.string.style_off_body))
                 }
 
+                Pattern.CHASE, Pattern.COMET, Pattern.WAVE -> PixelCard {
+                    SectionTitle(stringResource(pattern.labelRes))
+                    ColorPicker(ambient.color, { store.setAmbient(ambient.copy(color = it)) })
+                    Spacer(Modifier.size(12.dp))
+                    DirectionSelector(
+                        selected = ambient.direction,
+                        onSelect = { store.setAmbient(ambient.copy(direction = it)) },
+                    )
+                }
+
                 else -> PixelCard {
                     SectionTitle(stringResource(R.string.style_colour))
                     ColorPicker(ambient.color, { store.setAmbient(ambient.copy(color = it)) })
@@ -511,6 +521,60 @@ private fun LedSwatch(
             },
         contentAlignment = Alignment.Center,
     ) {}
+}
+
+/** 3-segment direction selector for moving patterns (Forward, Reverse, Bilateral). */
+@Composable
+fun DirectionSelector(
+    selected: Direction,
+    onSelect: (Direction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptics = LocalHapticFeedback.current
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Caption(stringResource(R.string.direction_label))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Direction.entries.forEach { dir ->
+                val isSelected = dir == selected
+                val bg by animateColorAsState(
+                    if (isSelected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.surfaceContainerHighest,
+                    label = "dirBg",
+                )
+                val fg by animateColorAsState(
+                    if (isSelected) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    label = "dirFg",
+                )
+                val icon = when (dir) {
+                    Direction.FORWARD -> "→"
+                    Direction.REVERSE -> "←"
+                    Direction.BILATERAL -> "↔"
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(bg, CircleShape)
+                        .clickable {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onSelect(dir)
+                        }
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "$icon ${stringResource(dir.labelRes)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = fg,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
 }
 
 
