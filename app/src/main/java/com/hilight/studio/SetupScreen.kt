@@ -31,8 +31,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.core.content.FileProvider
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -187,6 +192,7 @@ fun SetupScreen(store: Store) {
     var forgetting by remember { mutableStateOf(false) }
     var checkingForUpdates by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
+    var downloadingUpdate by remember { mutableStateOf(false) }
     var selfTestCountdown by remember { mutableIntStateOf(0) }
     var selfTestWarning by remember { mutableStateOf<String?>(null) }
     var confirmingFaceDown by remember { mutableStateOf(false) }
@@ -588,10 +594,35 @@ fun SetupScreen(store: Store) {
         val available = updateResult as? UpdateCheckResult.Available
         if (available != null && !checkingForUpdates) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = { openExternalUrl(ctx, available.release.pageUrl) }) {
-                    ButtonLabel(stringResource(R.string.setup_updates_view_release))
+                if (available.release.apkUrl != null) {
+                    Button(
+                        onClick = {
+                            downloadAndInstallApk(ctx, available.release.apkUrl) { downloadingUpdate = it }
+                        },
+                        enabled = !downloadingUpdate,
+                    ) {
+                        ButtonLabel(
+                            stringResource(
+                                if (downloadingUpdate) R.string.setup_updates_downloading
+                                else R.string.setup_updates_install
+                            )
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { openExternalUrl(ctx, available.release.pageUrl) },
+                        enabled = !downloadingUpdate,
+                    ) {
+                        ButtonLabel(stringResource(R.string.setup_updates_view_release))
+                    }
+                } else {
+                    Button(onClick = { openExternalUrl(ctx, available.release.pageUrl) }) {
+                        ButtonLabel(stringResource(R.string.setup_updates_view_release))
+                    }
                 }
-                TextButton(onClick = checkForUpdates) {
+                TextButton(
+                    onClick = checkForUpdates,
+                    enabled = !downloadingUpdate,
+                ) {
                     ButtonLabel(stringResource(R.string.setup_updates_check_again))
                 }
             }
@@ -961,6 +992,53 @@ private fun openExternalUrl(ctx: Context, pageUrl: String) {
     val uri = Uri.parse(pageUrl)
     runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
         .onFailure { Toast.makeText(ctx, R.string.setup_no_browser, Toast.LENGTH_SHORT).show() }
+}
+
+private fun downloadAndInstallApk(ctx: Context, apkUrl: String, onProgress: (Boolean) -> Unit) {
+    onProgress(true)
+    Thread {
+        try {
+            val url = URL(apkUrl)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 60_000
+            connection.connect()
+
+            val updateDir = File(ctx.cacheDir, "updates").apply { mkdirs() }
+            val apkFile = File(updateDir, "HiLightStudioUpdate.apk")
+            if (apkFile.exists()) apkFile.delete()
+
+            connection.inputStream.use { input ->
+                apkFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                onProgress(false)
+                try {
+                    val uri = FileProvider.getUriForFile(
+                        ctx,
+                        "${ctx.packageName}.provider",
+                        apkFile,
+                    )
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    ctx.startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(ctx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                onProgress(false)
+                Toast.makeText(ctx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }.start()
 }
 
 private fun postSelfTestNotification(ctx: Context) {

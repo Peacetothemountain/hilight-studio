@@ -135,6 +135,9 @@
     <string name="setup_updates_checking">Checking GitHub…</string>
     <string name="setup_updates_available">Version %1$s is available.</string>
     <string name="setup_updates_view_release">View release</string>
+    <string name="setup_updates_install">Install update</string>
+    <string name="setup_updates_downloading">Downloading update…</string>
+    <string name="setup_updates_download_failed">Failed to download update.</string>
     <string name="setup_updates_check_again">Check again</string>
     <string name="setup_updates_current">You are up to date.</string>
     <string name="setup_updates_none">No published releases were found.</string>

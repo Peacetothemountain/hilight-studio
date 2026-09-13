@@ -8,6 +8,7 @@ internal data class GitHubRelease(
     val tagName: String,
     val versionName: String,
     val pageUrl: String,
+    val apkUrl: String? = null,
 )
 
 internal sealed interface UpdateCheckResult {
@@ -72,7 +73,19 @@ internal object GitHubUpdateChecker {
             val tag = entry.optString("tag_name")
             val version = ReleaseVersion.parse(tag) ?: continue
             if (latest == null || version > latest.version) {
-                latest = ResolvedRelease(tag, version)
+                var apkUrl: String? = null
+                val assets = entry.optJSONArray("assets")
+                if (assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.optJSONObject(i) ?: continue
+                        val name = asset.optString("name", "")
+                        if (name.endsWith(".apk", ignoreCase = true)) {
+                            apkUrl = asset.optString("browser_download_url").takeIf { it.isNotEmpty() }
+                            break
+                        }
+                    }
+                }
+                latest = ResolvedRelease(tag, version, apkUrl)
             }
         }
 
@@ -83,6 +96,7 @@ internal object GitHubUpdateChecker {
                     tagName = published.tag,
                     versionName = published.version.displayName,
                     pageUrl = RELEASES_PAGE + published.tag,
+                    apkUrl = published.apkUrl,
                 )
             )
         } else {
@@ -95,6 +109,7 @@ internal object GitHubUpdateChecker {
     private data class ResolvedRelease(
         val tag: String,
         val version: ReleaseVersion,
+        val apkUrl: String? = null,
     )
 
     private data class ReleaseVersion(

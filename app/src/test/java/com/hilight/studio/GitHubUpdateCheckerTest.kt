@@ -77,6 +77,36 @@ class GitHubUpdateCheckerTest {
         )
     }
 
+    @Test
+    fun `release with apk asset extracts apk download url`() {
+        val result = GitHubUpdateChecker.resolve(
+            currentVersionName = "1.0.6",
+            response = """
+                [
+                  {
+                    "tag_name": "v1.0.13",
+                    "draft": false,
+                    "prerelease": false,
+                    "assets": [
+                      {
+                        "name": "HiLightStudio1.0.13.apk",
+                        "browser_download_url": "https://github.com/Peacetothemountain/hilight-studio/releases/download/v1.0.13/HiLightStudio1.0.13.apk"
+                      }
+                    ]
+                  }
+                ]
+            """.trimIndent(),
+        )
+
+        assertTrue(result is UpdateCheckResult.Available)
+        val available = result as UpdateCheckResult.Available
+        assertEquals("1.0.13", available.release.versionName)
+        assertEquals(
+            "https://github.com/Peacetothemountain/hilight-studio/releases/download/v1.0.13/HiLightStudio1.0.13.apk",
+            available.release.apkUrl,
+        )
+    }
+
     private fun releases(vararg entries: String): String = entries.joinToString(
         prefix = "[",
         postfix = "]",

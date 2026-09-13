@@ -217,6 +217,12 @@
     <string name="setup_updates_available">バージョン %1$s を利用できます。</string>
     <!-- "View release" -->
     <string name="setup_updates_view_release">リリースを見る</string>
+    <!-- "Install update" -->
+    <string name="setup_updates_install">アップデートをインストール</string>
+    <!-- "Downloading update…" -->
+    <string name="setup_updates_downloading">ダウンロード中…</string>
+    <!-- "Failed to download update." -->
+    <string name="setup_updates_download_failed">アップデートのダウンロードに失敗しました。</string>
     <!-- "Check again" -->
     <string name="setup_updates_check_again">再確認</string>
     <!-- "You are up to date." -->

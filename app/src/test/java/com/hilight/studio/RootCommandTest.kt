@@ -24,12 +24,20 @@ class RootCommandTest {
         val signals = temporary.newFile()
         // Exercise the actual phone-shell command against a private /proc fixture. The shell
         // function records TERM and removes only the fixture; no host process can be signalled.
-        val script = "procRoot='${proc.absolutePath}'; signals='${signals.absolutePath}'; " +
+        val procPath = proc.absolutePath.replace('\\', '/')
+        val signalsPath = signals.absolutePath.replace('\\', '/')
+        val script = "procRoot='$procPath'; signals='$signalsPath'; " +
             "kill() { printf '%s\\n' \"\$*\" >> \"\$signals\"; " +
             "rm -r \"\$procRoot/\$2\"; }; " +
             RootCommand.stop(4321, "root", "root-1").replace("/proc/", "\"\$procRoot\"/")
-        val process = ProcessBuilder("sh", "-c", script).redirectErrorStream(true).start()
-        assertTrue("stop command must finish", process.waitFor(10, TimeUnit.SECONDS))
+        val scriptFile = temporary.newFile("stop_test.sh").apply {
+            writeText(script)
+        }
+        val scriptPath = scriptFile.absolutePath.replace('\\', '/')
+        val process = ProcessBuilder("sh", scriptPath).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().readText()
+        assertTrue("stop command must finish. Output: $output", process.waitFor(10, TimeUnit.SECONDS))
+        if (process.exitValue() != 0) println("STOP COMMAND FAILED (code=${process.exitValue()}): $output")
         return process.exitValue() to signals.readText()
     }
 

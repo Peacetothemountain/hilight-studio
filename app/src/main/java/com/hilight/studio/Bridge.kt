@@ -451,13 +451,20 @@ object Bridge {
         put("direction", direction)
     }
 
-    fun lookAlertJson(id: Long, look: Ambient, durationMs: Int, source: AlertSource): JSONObject =
-        look.toJson().apply {
+    fun lookAlertJson(
+        id: Long,
+        look: Ambient,
+        durationMs: Int,
+        source: AlertSource,
+        direction: Direction = look.direction,
+    ): JSONObject =
+        look.copy(direction = direction).toJson().apply {
             remove("mode")
             put("pattern", look.pattern.key)
             put("id", id)
             put("durationMs", durationMs)
             put("source", source.key)
+            put("direction", direction.key)
         }
 
     /** Monotonic-ish alert ids so the renderer can tell a new alert from a re-push. */

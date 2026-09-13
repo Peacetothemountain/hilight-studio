@@ -121,9 +121,13 @@ data class Ambient(
             put("direction", direction.key)
         }
         when (pattern) {
-            Pattern.CUSTOM, Pattern.GRADIENT -> put(
+            Pattern.CUSTOM -> put(
                 "colors",
                 JSONArray().also { a -> perLed.forEach { a.put(it.toUInt().toLong()) } },
+            )
+            Pattern.GRADIENT -> put(
+                "colors",
+                JSONArray().put(color.toUInt().toLong()).put(secondColor.toUInt().toLong()),
             )
             else -> put("color", color.toUInt().toLong())
         }
