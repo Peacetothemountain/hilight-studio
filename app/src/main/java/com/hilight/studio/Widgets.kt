@@ -68,15 +68,9 @@ val PRESET_COLORS = listOf(
     0xFF2979FF, 0xFF7C4DFF, 0xFFFF4081, 0xFFFFFFFF, 0xFFFF80AB,
 ).map { it.toInt() }
 
-internal fun interface PreviewLauncher {
-    fun launch(
-        pattern: Pattern,
-        color: Int,
-        speedMs: Int,
-        brightness: Float,
-        durationMs: Int,
-        direction: Direction,
-    )
+internal class PreviewLauncher(
+    private val launch: (Pattern, Int, Int, Float, Int, Direction, Ambient?) -> Unit,
+) {
     operator fun invoke(
         pattern: Pattern,
         color: Int,
@@ -84,7 +78,8 @@ internal fun interface PreviewLauncher {
         brightness: Float,
         durationMs: Int,
         direction: Direction = Direction.FORWARD,
-    ) = launch(pattern, color, speedMs, brightness, durationMs, direction)
+        look: Ambient? = null,
+    ) = launch(pattern, color, speedMs, brightness, durationMs, direction, look)
 }
 
 /** Launches every in-app preview through one truthful guard check without adding UI controls. */
@@ -93,10 +88,11 @@ internal fun rememberPreviewLauncher(store: Store): PreviewLauncher {
     val context = LocalContext.current.applicationContext
     val resources = LocalResources.current
     return remember(store, context, resources) {
-        PreviewLauncher { pattern, color, speedMs, brightness, durationMs, direction ->
+        PreviewLauncher { pattern, color, speedMs, brightness, durationMs, direction, look ->
             val reason = store.previewSuppressionReason()
             if (reason == null) {
-                store.preview(pattern, color, speedMs, brightness, durationMs, direction)
+                if (look != null) store.previewLook(look.copy(direction = direction), durationMs)
+                else store.preview(pattern, color, speedMs, brightness, durationMs, direction)
             } else {
                 Toast.makeText(
                     context,

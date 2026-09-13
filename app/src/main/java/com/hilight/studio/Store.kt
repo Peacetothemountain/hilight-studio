@@ -221,6 +221,31 @@ internal fun shouldKeepRootDestinationAfterExactExit(
 ): Boolean = rootReadyOrAvailable &&
     (requestedDestination == Transport.ROOT || fencedDestination == Transport.ROOT)
 
+/** AUTO may prefer the validated replacement only before another destination owns cleanup. */
+internal fun shouldPreferReconnectedShizuku(
+    selected: Transport,
+    source: Transport?,
+    exactSourceExitConfirmed: Boolean,
+    destination: Transport?,
+    destinationCleanupStarted: Boolean,
+    shizukuConnected: Boolean,
+    unresolvedShizukuOwnership: Boolean,
+): Boolean = selected == Transport.AUTO && source == Transport.SHIZUKU &&
+    exactSourceExitConfirmed && destination == Transport.ADB && !destinationCleanupStarted &&
+    shizukuConnected && !unresolvedShizukuOwnership
+
+/** Retry root may restore its destination only after exact source exit, before fallback cleanup. */
+internal fun shouldPreferRecoveredRoot(
+    selected: Transport,
+    source: Transport?,
+    exactSourceExitConfirmed: Boolean,
+    destination: Transport?,
+    destinationCleanupStarted: Boolean,
+    rootReadyOrAvailable: Boolean,
+): Boolean = selected == Transport.AUTO && source == Transport.ROOT &&
+    exactSourceExitConfirmed && destination == Transport.ADB && !destinationCleanupStarted &&
+    rootReadyOrAvailable
+
 internal enum class RootStartCompletion {
     RESUME_DESTINATION_CLEANUP,
     WAIT_FOR_DESTINATION,
@@ -293,6 +318,9 @@ class Store private constructor(private val app: Context) {
     private val prefs = app.getSharedPreferences("hilight", Context.MODE_PRIVATE)
     private val main = Handler(Looper.getMainLooper())
 
+    val deviceSignals = DeviceSignals(app, ::showDeviceSignal, ::cancelOwnedAlert)
+    val shizukuRecovery = ShizukuRecoveryNotification(app)
+
     private val adb = AdbBackend(app)
     val shizuku = ShizukuBackend(app)
     val root = RootBackend(app)
@@ -322,6 +350,13 @@ class Store private constructor(private val app: Context) {
 
     private val _quietEnd = MutableStateFlow(prefs.getInt("quietEnd", 7 * 60))
     val quietEnd: StateFlow<Int> = _quietEnd.asStateFlow()
+
+    private val _quietByDay = MutableStateFlow(prefs.getBoolean("quietByDay", false))
+    val quietByDay: StateFlow<Boolean> = _quietByDay.asStateFlow()
+    private val _quietDays = MutableStateFlow(decodeQuietDays(
+        prefs.getString("quietDays", null), QuietDay(true, _quietStart.value, _quietEnd.value),
+    ))
+    val quietDays: StateFlow<List<QuietDay>> = _quietDays.asStateFlow()
 
     /** Dim through quiet hours instead of going fully dark. */
     private val _quietDim = MutableStateFlow(prefs.getBoolean("quietDim", false))
@@ -460,6 +495,7 @@ class Store private constructor(private val app: Context) {
      */
     private var activeAlert: JSONObject? = null
     private var activeAlertSource: AlertSource? = null
+    private var activeAlertOwner: String? = null
     private var activeAlertFaceDownGated = false
     private var activeAlertScreenOffGated = false
     private var alertExpiry: Runnable? = null
@@ -575,18 +611,21 @@ class Store private constructor(private val app: Context) {
                         pushCurrent(arm = false)
                     }
                 }
+                updateShizukuRecoveryNotice()
                 HiLightTile.refresh(app)
             }
         }
         shizuku.onConfirmedServiceExit = { exit ->
             main.post {
                 handleConfirmedShizukuExit(exit)
+                updateShizukuRecoveryNotice()
                 HiLightTile.refresh(app)
             }
         }
         root.onStateChanged = {
             main.post {
                 if (resumeLifecycleIfPossible()) {
+                    updateShizukuRecoveryNotice()
                     HiLightTile.refresh(app)
                     return@post
                 }
@@ -602,6 +641,7 @@ class Store private constructor(private val app: Context) {
                     RootBackend.State.REQUESTING,
                     RootBackend.State.STARTING -> Unit
                 }
+                updateShizukuRecoveryNotice()
                 HiLightTile.refresh(app)
             }
         }
@@ -612,6 +652,7 @@ class Store private constructor(private val app: Context) {
         // Previously this only happened while adding or deleting a rule, so a reboot or process
         // death left valid saved rules inert until the user edited one again.
         syncForegroundWatcher()
+        deviceSignals.setMasterEnabled(_enabled.value)
     }
 
     // ------------------------------------------------------------------ transport selection
@@ -634,6 +675,7 @@ class Store private constructor(private val app: Context) {
     fun setTransport(t: Transport) {
         _transport.value = t
         prefs.edit().putString("transport", t.name).apply()
+        updateShizukuRecoveryNotice()
         if (t == Transport.SHIZUKU || t == Transport.AUTO) shizuku.refresh()
         if (sourceExitConfirmed && handoffTarget != null) {
             handoffTarget = destinationAfterSourceExit(handoffSource ?: Transport.AUTO)
@@ -656,6 +698,7 @@ class Store private constructor(private val app: Context) {
      * an idle revision; only confirmed binder death may advance to destination cleanup/fallback.
      */
     fun disconnectShizuku() {
+        shizukuRecovery.forgetConnection()
         if (handoffTarget != null) {
             if (handoffSource == Transport.SHIZUKU &&
                 handoffSourceStatus?.rendererStale == true
@@ -713,16 +756,24 @@ class Store private constructor(private val app: Context) {
         root.refreshPresence()
     }
 
+    fun setNotifyShizukuLoss(enabled: Boolean) {
+        shizukuRecovery.setEnabled(enabled)
+        refreshStatus()
+    }
+
     // ------------------------------------------------------------------ mutations
 
     fun setEnabled(v: Boolean) {
         _enabled.value = v
         prefs.edit().putBoolean("enabled", v).apply()
+        if (!v) cancelAlert()
+        deviceSignals.setMasterEnabled(v)
         syncForegroundWatcher()
         if (v && root.state.value == RootBackend.State.AVAILABLE &&
             !shizuku.unresolvedIncompatibleRenderer.value
         ) beginRootStart()
         else pushCurrent()
+        updateShizukuRecoveryNotice()
         HiLightTile.refresh(app)
     }
 
@@ -777,6 +828,25 @@ class Store private constructor(private val app: Context) {
             .putInt("quietStart", startMin)
             .putInt("quietEnd", endMin)
             .apply()
+        pushCurrent()
+    }
+
+    fun setQuietByDay(enabled: Boolean) {
+        // First opt-in inherits the current daily times, including edits made since launch.
+        if (enabled && !prefs.contains("quietDays")) {
+            _quietDays.value = List(7) { QuietDay(true, _quietStart.value, _quietEnd.value) }
+        }
+        _quietByDay.value = enabled
+        prefs.edit().putBoolean("quietByDay", enabled)
+            .putString("quietDays", encodeQuietDays(_quietDays.value)).apply()
+        pushCurrent()
+    }
+
+    fun setQuietDay(day: Int, value: QuietDay) {
+        if (day !in 0..6) return
+        val safe = value.copy(startMin = value.startMin.coerceIn(0, 1439), endMin = value.endMin.coerceIn(0, 1439))
+        _quietDays.value = _quietDays.value.mapIndexed { index, old -> if (index == day) safe else old }
+        prefs.edit().putString("quietDays", encodeQuietDays(_quietDays.value)).apply()
         pushCurrent()
     }
 
@@ -1288,7 +1358,7 @@ class Store private constructor(private val app: Context) {
         send(_enabled.value, activeAlert ?: foregroundOverride?.second, arm)
 
     /** Fires a one-shot alert, then falls back to the override/ambient layer. */
-    fun fireAlert(rule: AppRule) {
+    fun fireAlert(rule: AppRule, owner: String? = null) {
         // The notification listener calls this from its own thread, while the alert slot below, its
         // expiry callback and every other push are main-thread state. Hopping once here keeps the top
         // layer single-threaded instead of trusting two threads not to interleave over it — an alert
@@ -1296,10 +1366,12 @@ class Store private constructor(private val app: Context) {
         // stuck on. The bridge write this ends in already happens on main for every slider the user
         // moves, so it is not a new cost.
         if (Looper.myLooper() != main.looper) {
-            main.post { runCatching { fireAlert(rule) }.onFailure { Log.w(TAG, "alert failed", it) } }
+            main.post { runCatching { fireAlert(rule, owner) }.onFailure { Log.w(TAG, "alert failed", it) } }
             return
         }
         if (!_enabled.value) return
+        if (rule.onlyWhenScreenOff && screenOn()) return
+        if (_respectDnd.value && deviceSignals.shouldSuppressForDnd) return
         // NotificationTrigger checks this before posting here, and main checks again because the
         // phone can be lifted during that hop. Unknown or stale sensor state always fails closed.
         if (rule.onlyWhenFaceDown && !isFaceDownNow()) return
@@ -1310,13 +1382,10 @@ class Store private constructor(private val app: Context) {
         if (guardState().alertSuppression() != null) return
         val color = if (rule.randomColor) randomColor() else rule.color
         holdAlert(
-            alert = Bridge.alertJson(
+            alert = Bridge.lookAlertJson(
                 id = Bridge.nextAlertId(),
-                pattern = rule.pattern,
-                color = color,
+                look = rule.effectiveLook(color),
                 durationMs = rule.durationMs,
-                speedMs = rule.speedMs,
-                brightness = rule.brightness,
                 source = AlertSource.NOTIFICATION,
                 direction = rule.direction,
             ),
@@ -1326,6 +1395,7 @@ class Store private constructor(private val app: Context) {
             source = AlertSource.NOTIFICATION,
             faceDownGated = rule.onlyWhenFaceDown,
             screenOffGated = rule.onlyWhenScreenOff,
+            owner = owner,
         )
     }
 
@@ -1345,9 +1415,11 @@ class Store private constructor(private val app: Context) {
         source: AlertSource,
         faceDownGated: Boolean = false,
         screenOffGated: Boolean = false,
+        owner: String? = null,
     ) {
         activeAlert = alert
         activeAlertSource = source
+        activeAlertOwner = owner
         activeAlertFaceDownGated = faceDownGated
         activeAlertScreenOffGated = screenOffGated
         alertIsPreview = preview != null
@@ -1373,6 +1445,7 @@ class Store private constructor(private val app: Context) {
     private fun releaseAlert() {
         activeAlert = null
         activeAlertSource = null
+        activeAlertOwner = null
         activeAlertFaceDownGated = false
         activeAlertScreenOffGated = false
         alertIsPreview = false
@@ -1403,13 +1476,10 @@ class Store private constructor(private val app: Context) {
         }
         if (foregroundOverride?.first == pkg) return
         val color = if (rule.randomColor) randomColor() else rule.color
-        foregroundOverride = pkg to Bridge.alertJson(
+        foregroundOverride = pkg to Bridge.lookAlertJson(
             id = Bridge.nextAlertId(),
-            pattern = rule.pattern,
-            color = color,
+            look = rule.effectiveLook(color),
             durationMs = 0,                 // hold until cleared
-            speedMs = rule.speedMs,
-            brightness = rule.brightness,
             source = AlertSource.FOREGROUND,
             direction = rule.direction,
         )
@@ -1422,6 +1492,37 @@ class Store private constructor(private val app: Context) {
     /** The look currently being tested, so the hero can show it instead of the ambient look. */
     private val _previewLook = MutableStateFlow<Ambient?>(null)
     val previewLook: StateFlow<Ambient?> = _previewLook.asStateFlow()
+
+    fun previewLook(look: Ambient, durationMs: Int = 4000) {
+        holdAlert(
+            Bridge.lookAlertJson(Bridge.nextAlertId(), look, durationMs, AlertSource.PREVIEW),
+            durationMs, arm = true, preview = look, source = AlertSource.PREVIEW,
+        )
+    }
+
+    internal fun cancelOwnedAlert(owner: String) {
+        if (Looper.myLooper() != main.looper) {
+            main.post { cancelOwnedAlert(owner) }
+            return
+        }
+        if (activeAlertOwner == owner) cancelAlert()
+    }
+
+    internal fun showDeviceSignal(owner: String, look: Ambient, durationMs: Int): Boolean {
+        if (!_enabled.value || guardState().alertSuppression() != null) return false
+        if (owner != DeviceSignals.OWNER_DND && _respectDnd.value && deviceSignals.shouldSuppressForDnd) return false
+        // Background indicators must not cut short a message or a deliberate preview.
+        if (activeAlert != null && activeAlertOwner != owner) return false
+        val duration = durationMs.coerceIn(250, Limits.RULE_MAX_MS)
+        holdAlert(
+            Bridge.lookAlertJson(Bridge.nextAlertId(), look, duration, AlertSource.NOTIFICATION),
+            duration, arm = false, preview = null, source = AlertSource.NOTIFICATION,
+            owner = owner,
+        )
+        return true
+    }
+
+    internal fun hasActiveAlert(): Boolean = activeAlert != null
 
     /** One-off preview used by the Test buttons. */
     fun preview(
@@ -1460,7 +1561,8 @@ class Store private constructor(private val app: Context) {
     fun previewSuppressionReason(): Suppression? = guardState().previewSuppressionReason()
 
     /** Current pre-check for a real notification self-test, which follows notification guards. */
-    fun notificationTestSuppressionReason(): Suppression? = guardState().alertSuppression()
+    fun notificationTestSuppressionReason(scheduling: Boolean = false): Suppression? =
+        if (scheduling) guardState().scheduledTestSuppressionReason() else guardState().alertSuppression()
 
     /**
      * Kills a running preview. Called when the app leaves the foreground: a test the user started by
@@ -1599,17 +1701,18 @@ class Store private constructor(private val app: Context) {
         return if (charging) 100 else level * 100 / scale
     }
 
-    private fun inQuietWindow(nowMin: Int): Boolean {
+    private fun inQuietWindow(): Boolean {
+        val calendar = java.util.Calendar.getInstance()
+        val nowMin = calendar.get(java.util.Calendar.HOUR_OF_DAY) * 60 + calendar.get(java.util.Calendar.MINUTE)
+        if (_quietByDay.value) {
+            val day = (calendar.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
+            return isQuietAt(_quietDays.value, day, nowMin)
+        }
         val start = _quietStart.value
         val end = _quietEnd.value
         if (start == end) return false
         return if (start < end) nowMin in start until end
         else nowMin >= start || nowMin < end       // window crosses midnight
-    }
-
-    private fun nowMinutes(): Int {
-        val cal = java.util.Calendar.getInstance()
-        return cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
     }
 
     private fun screenOn(): Boolean =
@@ -1659,7 +1762,7 @@ class Store private constructor(private val app: Context) {
         faceDown = isFaceDownNow(),
         quietEnabled = _quietEnabled.value,
         quietDim = _quietDim.value,
-        inQuietWindow = inQuietWindow(nowMinutes()),
+        inQuietWindow = inQuietWindow(),
         saverGuard = _saverGuard.value,
         powerSaveMode = powerSaveMode(),
         batteryGuard = _batteryGuard.value,
@@ -1672,7 +1775,7 @@ class Store private constructor(private val app: Context) {
 
     /** Scale applied to every frame — below 1 only inside a dimmed quiet window. */
     private fun dimFactor(): Float =
-        if (_quietEnabled.value && _quietDim.value && inQuietWindow(nowMinutes())) {
+        if (_quietEnabled.value && _quietDim.value && inQuietWindow()) {
             _quietDimPct.value / 100f
         } else {
             1f
@@ -2125,6 +2228,33 @@ class Store private constructor(private val app: Context) {
     private fun beginPostExitDestinationCleanupIfPossible(): Boolean {
         if (!sourceExitConfirmed || pendingHandoff == null) return false
         if (postExitCleanupInFlight) return true
+        if (shouldPreferRecoveredRoot(
+                selected = _transport.value,
+                source = handoffSource,
+                exactSourceExitConfirmed = sourceExitConfirmed,
+                destination = handoffTarget,
+                destinationCleanupStarted = postExitCleanupDestination != null,
+                rootReadyOrAvailable = root.state.value == RootBackend.State.AVAILABLE ||
+                    root.state.value == RootBackend.State.RUNNING,
+            )
+        ) {
+            handoffTarget = Transport.ROOT
+        }
+        if (shouldPreferReconnectedShizuku(
+                selected = _transport.value,
+                source = handoffSource,
+                exactSourceExitConfirmed = sourceExitConfirmed,
+                destination = handoffTarget,
+                destinationCleanupStarted = postExitCleanupDestination != null,
+                shizukuConnected = shizuku.state.value == ShizukuBackend.State.CONNECTED,
+                unresolvedShizukuOwnership = shizuku.unresolvedIncompatibleRenderer.value,
+            )
+        ) {
+            // During an APK upgrade AUTO initially chooses ADB while the old Shizuku binder exits.
+            // A validated successor can arrive later. Keep the exact source-exit proof and run the
+            // normal fresh cleanup on that successor instead of waiting forever for absent ADB.
+            handoffTarget = Transport.SHIZUKU
+        }
         val to = handoffTarget ?: return true
 
         if (to == Transport.ROOT && root.state.value != RootBackend.State.RUNNING) {
@@ -2918,6 +3048,7 @@ class Store private constructor(private val app: Context) {
         _status.value = next
         _activeTransport.value = active.transport
         reconcileManualCleanupRequest(next)
+        updateShizukuRecoveryNotice()
         if (resumeLifecycleIfPossible()) return
         val lifecycleBusy = rootTransition || handoffTarget != null ||
             coldDiscoveryPending != null || bridgeRepushInFlightInstanceId != null ||
@@ -2946,6 +3077,13 @@ class Store private constructor(private val app: Context) {
         lifecycleFenced = rootTransition || handoffTarget != null ||
             coldDiscoveryPending != null || shizuku.unresolvedIncompatibleRenderer.value,
     )
+
+    private fun updateShizukuRecoveryNotice() {
+        shizukuRecovery.observe(_enabled.value, _transport.value, _activeTransport.value,
+            isRendererConnectedForUi(_status.value), shizuku.state.value,
+            rootTransition || root.state.value in setOf(RootBackend.State.CHECKING,
+                RootBackend.State.REQUESTING, RootBackend.State.STARTING))
+    }
 
     /** Reads transport and renderer status together for one user-requested diagnostics capture. */
     fun freshRendererStatusSnapshot(): RendererStatusSnapshot {
