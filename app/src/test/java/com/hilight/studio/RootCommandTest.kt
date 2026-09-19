@@ -103,6 +103,8 @@ class RootCommandTest {
     @Test
     fun `missing current APK cannot silently launch a renderer from another installed edition`() {
         val missing = java.io.File(temporary.newFolder(), "missing.apk").absolutePath
+            .replace('\\', '/')
+            .let { if (it.length > 1 && it[1] == ':') "/${it[0].lowercaseChar()}${it.substring(2)}" else it }
         val process = ProcessBuilder("sh", "-c", RootCommand.start("/unused", "root-1", missing))
             .redirectErrorStream(true).start()
         assertTrue(process.waitFor(3, TimeUnit.SECONDS))

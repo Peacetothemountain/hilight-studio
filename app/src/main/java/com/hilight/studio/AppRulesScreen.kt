@@ -513,6 +513,7 @@ private fun RuleCard(
                 Modifier.fillMaxWidth(0.72f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Box(contentAlignment = Alignment.BottomEnd) {
                     AppPackageIcon(rule.pkg, modifier = Modifier.size(38.dp))
                     if (!rule.randomColor) {
