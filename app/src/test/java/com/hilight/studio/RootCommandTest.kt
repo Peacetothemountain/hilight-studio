@@ -12,7 +12,17 @@ class RootCommandTest {
 
     @get:Rule val temporary = TemporaryFolder()
 
-    private fun runStop(processes: Map<Int, List<String>>): Pair<Int, String> {
+    private fun toBashPath(file: java.io.File): String {
+        val p = file.absolutePath.replace('\\', '/')
+        return if (p.length > 1 && p[1] == ':') "/${p[0].lowercaseChar()}${p.substring(2)}" else p
+    }
+
+    private fun runStop(
+        processes: Map<Int, List<String>>,
+        executables: Map<Int, String> = emptyMap(),
+        instance: String = "root-1",
+        outerShell: String? = null,
+    ): Pair<Int, String> {
         val proc = temporary.newFolder()
         for ((pid, args) in processes) {
             val dir = java.io.File(proc, pid.toString()).apply { mkdir() }
@@ -20,30 +30,141 @@ class RootCommandTest {
                 if (args.isEmpty()) byteArrayOf() else
                     (args.joinToString("\u0000") + "\u0000").toByteArray(),
             )
+            executables[pid]?.let { executable ->
+                try {
+                    java.nio.file.Files.createSymbolicLink(
+                        java.io.File(dir, "exe").toPath(), java.io.File(executable).toPath(),
+                    )
+                } catch (e: Exception) {
+                    org.junit.Assume.assumeNoException("Symlinks not supported on this host without elevation", e)
+                }
+            }
         }
         val signals = temporary.newFile()
         // Exercise the actual phone-shell command against a private /proc fixture. The shell
         // function records TERM and removes only the fixture; no host process can be signalled.
-        val procPath = proc.absolutePath.replace('\\', '/')
-        val signalsPath = signals.absolutePath.replace('\\', '/')
+        val procPath = toBashPath(proc)
+        val signalsPath = toBashPath(signals)
         val script = "procRoot='$procPath'; signals='$signalsPath'; " +
             "kill() { printf '%s\\n' \"\$*\" >> \"\$signals\"; " +
             "rm -r \"\$procRoot/\$2\"; }; " +
-            RootCommand.stop(4321, "root", "root-1").replace("/proc/", "\"\$procRoot\"/")
-        val scriptFile = temporary.newFile("stop_test.sh").apply {
+            RootCommand.stopBody(4321, "root", instance).replace("/proc/", "\"\$procRoot\"/")
+        val scriptFile = java.io.File.createTempFile("stop_test", ".sh", temporary.root).apply {
             writeText(script)
         }
-        val scriptPath = scriptFile.absolutePath.replace('\\', '/')
-        val process = ProcessBuilder("sh", scriptPath).redirectErrorStream(true).start()
+        val scriptPath = toBashPath(scriptFile)
+        val shell = outerShell ?: shellPath
+        val process = ProcessBuilder(shell, scriptPath).redirectErrorStream(true).start()
+        val finished = process.waitFor(10, TimeUnit.SECONDS)
         val output = process.inputStream.bufferedReader().readText()
-        assertTrue("stop command must finish. Output: $output", process.waitFor(10, TimeUnit.SECONDS))
-        if (process.exitValue() != 0) println("STOP COMMAND FAILED (code=${process.exitValue()}): $output")
+        assertTrue("stop command must finish. Output: $output", finished)
         return process.exitValue() to signals.readText()
+    }
+
+    private val shellPath: String by lazy {
+        val candidates = listOf(
+            "bash",
+            "sh",
+            "C:/Users/caref/scoop/apps/git/current/bin/bash.exe",
+            "C:/Program Files/Git/bin/bash.exe",
+            "/bin/bash",
+            "/bin/sh",
+        )
+        candidates.firstOrNull { candidate ->
+            try {
+                ProcessBuilder(candidate, "-c", "exit 0").start().waitFor() == 0
+            } catch (e: Exception) {
+                false
+            }
+        } ?: "bash"
+    }
+
+    @Test
+    fun `scanning unrelated processes does not fork a command per process`() {
+        val proc = temporary.newFolder()
+        repeat(500) { index ->
+            val dir = java.io.File(proc, (10_000 + index).toString()).apply { mkdir() }
+            java.io.File(dir, "cmdline").writeBytes("com.example.worker\u0000--background\u0000".toByteArray())
+        }
+        val calls = temporary.newFile()
+        val procPath = toBashPath(proc)
+        val callsPath = toBashPath(calls)
+        val script = "calls='$callsPath'; " +
+            "tr() { echo tr >> \"\$calls\"; command tr \"\$@\"; }; " +
+            "kill() { echo unexpected-kill >> \"\$calls\"; return 1; }; " +
+            RootCommand.stopBody(4321, "root", "root-1").replace("/proc/", "'$procPath'/")
+        val scriptFile = temporary.newFile("scan_test.sh").apply {
+            writeText(script)
+        }
+        val scriptPath = toBashPath(scriptFile)
+        val process = ProcessBuilder(shellPath, scriptPath).redirectErrorStream(true).start()
+        assertTrue(process.waitFor(10, TimeUnit.SECONDS))
+        assertEquals(0, process.exitValue())
+        assertEquals("ordinary processes must not consume the stop deadline spawning tr", "", calls.readText())
+    }
+
+    @Test
+    fun `cleanup explicitly pins Android shell and quotes the complete body`() {
+        val body = RootCommand.stopBody(4321, "root", "root-1")
+        val quoted = "'" + body.replace("'", "'\\''") + "'"
+        assertEquals("/system/bin/sh -c $quoted", RootCommand.stop(4321, "root", "root-1"))
+    }
+
+    @Test
+    fun `outer POSIX shell cannot change cleanup reader or bypass ownership checks`() {
+        org.junit.Assume.assumeTrue(java.io.File("/bin/dash").canExecute())
+        val unrelated = mapOf(9876 to listOf("com.example.app"))
+        assertEquals(0, runStop(unrelated, mapOf(9876 to "/system/bin/app_process64"), outerShell = "/bin/dash").first)
+        val blocked = runStop(mapOf(9876 to helper("root-other")), outerShell = "/bin/dash")
+        assertEquals(1, blocked.first)
+        assertEquals("", blocked.second)
+        val stopped = runStop(mapOf(4321 to helper("root-1")), outerShell = "/bin/dash")
+        assertEquals(0, stopped.first)
+        assertEquals("-TERM 4321\n", stopped.second)
     }
 
     private fun helper(instance: String) = listOf(
         "app_process", "/", "com.hilight.core.AdbHelper", "--owner", "root", "--instance", instance,
     )
+
+    @Test
+    fun `scan rejects surviving helper for every app process executable spelling`() {
+        for (executable in listOf("app_process", "/system/bin/app_process32", "/system/bin/app_process64")) {
+            val (code, signals) = runStop(mapOf(9876 to helper("root-2").toMutableList().apply {
+                this[0] = executable
+            }))
+            assertEquals(executable, 1, code)
+            assertEquals("", signals)
+        }
+    }
+
+    @Test
+    fun `empty cmdline for app process still blocks recovery`() {
+        val (code, signals) = runStop(
+            mapOf(9876 to emptyList()), mapOf(9876 to "/system/bin/app_process64"),
+        )
+        assertEquals(1, code)
+        assertEquals("", signals)
+    }
+
+    @Test
+    fun `other app process classes and helper names inside unrelated arguments are harmless`() {
+        val (code, signals) = runStop(mapOf(
+            9876 to listOf("/system/bin/app_process64", "/", "another.JavaClass"),
+            9877 to listOf("sh", "-c", "app_process / com.hilight.core.AdbHelper"),
+            9878 to listOf("app_process / com.hilight.core.AdbHelper"),
+        ))
+        assertEquals(0, code)
+        assertEquals("", signals)
+    }
+
+    @Test
+    fun `legacy helper without instance is stopped only through the legacy identity path`() {
+        val legacy = listOf("app_process", "/", "com.hilight.core.AdbHelper", "--owner", "root", "--dir", "/bridge")
+        val (code, signals) = runStop(mapOf(4321 to legacy), instance = "")
+        assertEquals(0, code)
+        assertEquals("-TERM 4321\n", signals)
+    }
 
     @Test
     fun `expired renderer pid reused by an unrelated process is not killed or a permanent blocker`() {
@@ -105,7 +226,7 @@ class RootCommandTest {
         val missing = java.io.File(temporary.newFolder(), "missing.apk").absolutePath
             .replace('\\', '/')
             .let { if (it.length > 1 && it[1] == ':') "/${it[0].lowercaseChar()}${it.substring(2)}" else it }
-        val process = ProcessBuilder("sh", "-c", RootCommand.start("/unused", "root-1", missing))
+        val process = ProcessBuilder(shellPath, "-c", RootCommand.start("/unused", "root-1", missing))
             .redirectErrorStream(true).start()
         assertTrue(process.waitFor(3, TimeUnit.SECONDS))
         assertEquals(1, process.exitValue())
@@ -121,14 +242,13 @@ class RootCommandTest {
 
     @Test
     fun `root stop validates pid and owner before cooperative term`() {
-        val stop = RootCommand.stop(4321, "root", "root-instance-1")
+        val stop = RootCommand.stopBody(4321, "root", "root-instance-1")
 
         assertTrue(stop.contains("/proc/4321/cmdline"))
         assertTrue(stop.contains("' --owner root '"))
         assertTrue(stop.contains("kill -TERM 4321"))
         assertFalse(stop.contains("kill -TERM \$p"))
         assertTrue(stop.contains("[ \"\$arg\" = \"root-instance-1\" ]"))
-        assertTrue(stop.contains("[ \"\$3\" = com.hilight.core.AdbHelper ]"))
         assertTrue(stop.contains("\$i -lt 65"))
         assertTrue(stop.contains("then exit 1"))
         assertFalse(stop.contains("pkill"))
@@ -136,7 +256,7 @@ class RootCommandTest {
 
     @Test
     fun `renderer instance identity is an exact argv token not a prefix`() {
-        val stop = RootCommand.stop(4321, "root", "root-1")
+        val stop = RootCommand.stopBody(4321, "root", "root-1")
 
         assertTrue(stop.contains("while IFS= read -r arg"))
         assertTrue(stop.contains("[ \"\$prev\" = --instance ]"))
@@ -146,7 +266,7 @@ class RootCommandTest {
 
     @Test
     fun `adb stop rejects a root-owned helper with the same entry point`() {
-        val stop = RootCommand.stop(4321, "adb")
+        val stop = RootCommand.stopBody(4321, "adb")
 
         assertTrue(stop.contains("com.hilight.core.AdbHelper"))
         assertTrue(stop.contains("! printf"))
