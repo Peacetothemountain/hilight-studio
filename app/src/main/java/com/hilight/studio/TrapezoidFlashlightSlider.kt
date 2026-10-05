@@ -190,7 +190,7 @@ fun TrapezoidFlashlightSlider(
                 if (value > 0.01f) R.drawable.ic_flashlight_torch else R.drawable.ic_flashlight_torch_off
             ),
             contentDescription = "Flashlight Torch",
-            tint = if (value > 0.01f) Color(color) else torchTintOff,
+            tint = if (value > 0.01f) MaterialTheme.colorScheme.onSurface else torchTintOff,
             modifier = Modifier
                 .size(torchIconSizeDp)
                 .clickable(

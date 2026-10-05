@@ -41,12 +41,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -154,18 +159,14 @@ class TileDialogActivity : ComponentActivity() {
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
 
-                                // Live Percentage Pill Badge
-                                val badgeColor by animateColorAsState(
-                                    targetValue = if (active && currentPercentage > 0) Color(color) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    label = "badgeColor"
-                                )
+                                // Live Percentage Pill Badge (Material colors)
                                 Text(
                                     text = if (active && currentPercentage > 0) "$currentPercentage%" else "Off",
                                     style = MaterialTheme.typography.labelLarge.copy(
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold
                                     ),
-                                    color = badgeColor
+                                    color = if (active && currentPercentage > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
@@ -306,11 +307,21 @@ class TileDialogActivity : ComponentActivity() {
                                                 } else Modifier
                                             )
                                             .clip(CircleShape)
-                                            .background(if (showColorPalette) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest)
-                                            .border(
-                                                width = if (isColorWheelActive) 2.5.dp else 1.5.dp,
-                                                brush = rainbowBrush,
-                                                shape = CircleShape
+                                            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                            .then(
+                                                if (!isColorWheelActive) {
+                                                    Modifier.border(
+                                                        width = 1.5.dp,
+                                                        brush = rainbowBrush,
+                                                        shape = CircleShape
+                                                    )
+                                                } else {
+                                                    Modifier.border(
+                                                        width = 1.dp,
+                                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                                        shape = CircleShape
+                                                    )
+                                                }
                                             )
                                             .clickable(role = androidx.compose.ui.semantics.Role.Button) {
                                                 PixelHaptics.click(view)
@@ -318,11 +329,42 @@ class TileDialogActivity : ComponentActivity() {
                                             },
                                         contentAlignment = Alignment.Center
                                     ) {
+                                        // Paint canvas icon as transparent stencil filter: color passes through from behind
                                         Icon(
                                             Icons.Rounded.ColorLens,
                                             contentDescription = "Color Wheel",
-                                            tint = if (isColorWheelActive) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(20.dp)
+                                            tint = Color.White,
+                                            modifier = Modifier
+                                                .size(20.dp)
+                                                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                                                .drawWithCache {
+                                                    val filterLightBrush = if (isColorWheelActive) {
+                                                        Brush.radialGradient(
+                                                            colors = listOf(
+                                                                Color.White.copy(alpha = 0.98f),
+                                                                selectedColor.copy(alpha = 0.95f),
+                                                                selectedColor,
+                                                                selectedColor.copy(alpha = 0.65f)
+                                                            ),
+                                                            center = Offset(size.width * 0.45f, size.height * 0.40f),
+                                                            radius = size.minDimension * 0.85f
+                                                        )
+                                                    } else {
+                                                        Brush.radialGradient(
+                                                            colors = listOf(
+                                                                Color(0xFFE0E0E0),
+                                                                Color(0xFF9E9E9E),
+                                                                Color(0xFF616161)
+                                                            ),
+                                                            center = Offset(size.width * 0.45f, size.height * 0.40f),
+                                                            radius = size.minDimension * 0.85f
+                                                        )
+                                                    }
+                                                    onDrawWithContent {
+                                                        drawContent()
+                                                        drawRect(brush = filterLightBrush, blendMode = BlendMode.SrcIn)
+                                                    }
+                                                }
                                         )
                                     }
 
@@ -443,6 +485,9 @@ class TileDialogActivity : ComponentActivity() {
                                                     .clickable {
                                                         PixelHaptics.click(view)
                                                         colorMode = ColorPickerMode.KELVIN_CCT
+                                                        val c = kelvinToRgb(selectedKelvin)
+                                                        whiteTempColor = c
+                                                        store.setFlashlightColor(c)
                                                     }
                                                     .padding(horizontal = 14.dp, vertical = 6.dp)
                                             ) {
@@ -469,6 +514,7 @@ class TileDialogActivity : ComponentActivity() {
                                             )
                                         } else {
                                             // Planckian CCT Temperature Selector
+                                            val kelvinColor = Color(kelvinToRgb(selectedKelvin))
                                             Column(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -479,7 +525,7 @@ class TileDialogActivity : ComponentActivity() {
                                                 Text(
                                                     text = getKelvinDescription(selectedKelvin),
                                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                                    color = Color(color)
+                                                    color = kelvinColor
                                                 )
 
                                                 // Realistic Blackbody Radiation Gradient Bar
@@ -514,8 +560,8 @@ class TileDialogActivity : ComponentActivity() {
                                                     valueRange = 2000f..7000f,
                                                     steps = 25,
                                                     colors = SliderDefaults.colors(
-                                                        thumbColor = Color(color),
-                                                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                                                        thumbColor = kelvinColor,
+                                                        activeTrackColor = kelvinColor.copy(alpha = 0.85f),
                                                         inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                                                     )
                                                 )
@@ -527,12 +573,13 @@ class TileDialogActivity : ComponentActivity() {
                                                 ) {
                                                     listOf(2700 to "2700K", 4000 to "4000K", 5500 to "5500K", 6500 to "6500K").forEach { (k, label) ->
                                                         val isCur = selectedKelvin == k
+                                                        val presetColor = Color(kelvinToRgb(k))
                                                         Text(
                                                             text = label,
                                                             style = MaterialTheme.typography.labelSmall.copy(
                                                                 fontWeight = if (isCur) FontWeight.Bold else FontWeight.Normal
                                                             ),
-                                                            color = if (isCur) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            color = if (isCur) presetColor else MaterialTheme.colorScheme.onSurfaceVariant,
                                                             modifier = Modifier
                                                                 .clip(CircleShape)
                                                                 .clickable {
