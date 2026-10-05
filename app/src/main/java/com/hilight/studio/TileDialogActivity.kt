@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
@@ -43,6 +44,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -192,31 +196,54 @@ class TileDialogActivity : ComponentActivity() {
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                // Continuous organic breathing luminous glow animation
-                                val infiniteGlow = rememberInfiniteTransition(label = "luminousGlow")
-                                val glowPulse by infiniteGlow.animateFloat(
-                                    initialValue = 0.55f,
-                                    targetValue = 0.98f,
+                                // Material 3 Expressive continuous spinning luminous ring animations
+                                val infiniteTransition = rememberInfiniteTransition(label = "luminousSpinner")
+
+                                // Smooth continuous 360° rotation for the orbiting luminous circle
+                                val spinAngle by infiniteTransition.animateFloat(
+                                    initialValue = 0f,
+                                    targetValue = 360f,
                                     animationSpec = infiniteRepeatable(
-                                        animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
-                                        repeatMode = RepeatMode.Reverse
+                                        animation = tween(durationMillis = 2600, easing = LinearEasing),
+                                        repeatMode = RepeatMode.Restart
                                     ),
-                                    label = "glowPulse"
+                                    label = "spinAngle"
                                 )
-                                val glowSpread by infiniteGlow.animateFloat(
-                                    initialValue = 6f,
-                                    targetValue = 11f,
+
+                                // Fluid breathing / shimmering luminance pulse
+                                val shimmerPulse by infiniteTransition.animateFloat(
+                                    initialValue = 0.65f,
+                                    targetValue = 1.0f,
                                     animationSpec = infiniteRepeatable(
-                                        animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+                                        animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
                                         repeatMode = RepeatMode.Reverse
                                     ),
-                                    label = "glowSpread"
+                                    label = "shimmerPulse"
                                 )
 
                                 val isWhiteActive = (color == whiteTempColor) && !showColorPalette
                                 val isColorWheelActive = (color != whiteTempColor) || showColorPalette
-                                val selectedGlowColor = Color(color)
-                                val whiteGlowColor = Color(whiteTempColor)
+                                val selectedColor = Color(color)
+
+                                // Goldish shimmering brush for the White button
+                                val goldShimmerBrush = Brush.sweepGradient(
+                                    0.0f to Color(0xFFFFF9E6).copy(alpha = 0.98f * shimmerPulse),
+                                    0.18f to Color(0xFFFFD54F).copy(alpha = 0.85f * shimmerPulse),
+                                    0.40f to Color(0xFFFFB300).copy(alpha = 0.35f * shimmerPulse),
+                                    0.65f to Color.Transparent,
+                                    0.82f to Color(0xFFFFE082).copy(alpha = 0.50f * shimmerPulse),
+                                    1.0f to Color(0xFFFFF9E6).copy(alpha = 0.98f * shimmerPulse)
+                                )
+
+                                // Selected color spinning luminous brush for the Color Wheel
+                                val colorWheelSpinBrush = Brush.sweepGradient(
+                                    0.0f to selectedColor.copy(alpha = 0.98f * shimmerPulse),
+                                    0.18f to selectedColor.copy(alpha = 0.85f * shimmerPulse),
+                                    0.40f to selectedColor.copy(alpha = 0.35f * shimmerPulse),
+                                    0.65f to Color.Transparent,
+                                    0.82f to selectedColor.copy(alpha = 0.50f * shimmerPulse),
+                                    1.0f to selectedColor.copy(alpha = 0.98f * shimmerPulse)
+                                )
 
                                 // Controls Row: Color Wheel Expander & White Auto-Select Color
                                 Row(
@@ -224,7 +251,7 @@ class TileDialogActivity : ComponentActivity() {
                                     horizontalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterHorizontally),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // 1. Color Wheel Expander Toggle Chip with Selected Color Luminous Glow
+                                    // 1. Color Wheel Expander Toggle Chip with Spinning Luminous Ring in Selected Color
                                     val rainbowBrush = Brush.sweepGradient(
                                         listOf(
                                             Color.Red, Color.Yellow, Color.Green,
@@ -248,18 +275,33 @@ class TileDialogActivity : ComponentActivity() {
                                                 if (isColorWheelActive) {
                                                     Modifier.drawBehind {
                                                         val radius = size.minDimension / 2f
+                                                        val ringRadius = radius + 4.dp.toPx()
+
+                                                        // 1. Soft radial luminous aura using selected color
                                                         drawCircle(
                                                             brush = Brush.radialGradient(
                                                                 colors = listOf(
-                                                                    selectedGlowColor.copy(alpha = 0.85f * glowPulse),
-                                                                    selectedGlowColor.copy(alpha = 0.45f * glowPulse),
-                                                                    selectedGlowColor.copy(alpha = 0.12f * glowPulse),
+                                                                    selectedColor.copy(alpha = 0.40f * shimmerPulse),
+                                                                    selectedColor.copy(alpha = 0.12f * shimmerPulse),
                                                                     Color.Transparent
                                                                 ),
                                                                 center = center,
-                                                                radius = radius + glowSpread.dp.toPx()
+                                                                radius = ringRadius + 9.dp.toPx()
                                                             )
                                                         )
+
+                                                        // 2. Material 3 Expressive spinning luminous circle in selected color
+                                                        rotate(spinAngle) {
+                                                            drawCircle(
+                                                                brush = colorWheelSpinBrush,
+                                                                radius = ringRadius,
+                                                                center = center,
+                                                                style = Stroke(
+                                                                    width = 2.5.dp.toPx(),
+                                                                    cap = StrokeCap.Round
+                                                                )
+                                                            )
+                                                        }
                                                     }
                                                 } else Modifier
                                             )
@@ -279,12 +321,12 @@ class TileDialogActivity : ComponentActivity() {
                                         Icon(
                                             Icons.Rounded.ColorLens,
                                             contentDescription = "Color Wheel",
-                                            tint = if (isColorWheelActive) selectedGlowColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            tint = if (isColorWheelActive) selectedColor else MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(20.dp)
                                         )
                                     }
 
-                                    // 2. White / Temperature Auto-Select Color Chip with Soft Luminous White Halo
+                                    // 2. White / Temperature Auto-Select Color Chip with Slight Goldish Shimmering Spinning Circle
                                     val whiteScale by androidx.compose.animation.core.animateFloatAsState(
                                         targetValue = if (isWhiteActive) 1.08f else 1.0f,
                                         animationSpec = spring(
@@ -302,26 +344,41 @@ class TileDialogActivity : ComponentActivity() {
                                                 if (isWhiteActive) {
                                                     Modifier.drawBehind {
                                                         val radius = size.minDimension / 2f
+                                                        val ringRadius = radius + 4.dp.toPx()
+
+                                                        // 1. Soft goldish shimmering radial aura
                                                         drawCircle(
                                                             brush = Brush.radialGradient(
                                                                 colors = listOf(
-                                                                    whiteGlowColor.copy(alpha = 0.90f * glowPulse),
-                                                                    whiteGlowColor.copy(alpha = 0.50f * glowPulse),
-                                                                    whiteGlowColor.copy(alpha = 0.15f * glowPulse),
+                                                                    Color(0xFFFFD54F).copy(alpha = 0.38f * shimmerPulse),
+                                                                    Color(0xFFFFB300).copy(alpha = 0.12f * shimmerPulse),
                                                                     Color.Transparent
                                                                 ),
                                                                 center = center,
-                                                                radius = radius + glowSpread.dp.toPx()
+                                                                radius = ringRadius + 9.dp.toPx()
                                                             )
                                                         )
+
+                                                        // 2. Material 3 Expressive spinning goldish shimmering circle
+                                                        rotate(spinAngle) {
+                                                            drawCircle(
+                                                                brush = goldShimmerBrush,
+                                                                radius = ringRadius,
+                                                                center = center,
+                                                                style = Stroke(
+                                                                    width = 2.5.dp.toPx(),
+                                                                    cap = StrokeCap.Round
+                                                                )
+                                                            )
+                                                        }
                                                     }
                                                 } else Modifier
                                             )
                                             .clip(CircleShape)
                                             .background(Color(whiteTempColor))
                                             .border(
-                                                width = if (isWhiteActive) 2.5.dp else 1.dp,
-                                                color = if (isWhiteActive) Color.White.copy(alpha = 0.95f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                                                width = if (isWhiteActive) 2.dp else 1.dp,
+                                                color = if (isWhiteActive) Color(0xFFFFE082).copy(alpha = 0.85f * shimmerPulse) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
                                                 shape = CircleShape
                                             )
                                             .clickable(role = androidx.compose.ui.semantics.Role.Button) {
