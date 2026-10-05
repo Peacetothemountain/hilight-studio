@@ -187,7 +187,7 @@ fun TrapezoidFlashlightSlider(
         // Clean Google Pixel Flashlight Torch Icon (active vs off switch position)
         Icon(
             painter = painterResource(
-                if (value > 0.01f) R.drawable.ic_flashlight else R.drawable.ic_flashlight_off
+                if (value > 0.01f) R.drawable.ic_flashlight_torch else R.drawable.ic_flashlight_torch_off
             ),
             contentDescription = "Flashlight Torch",
             tint = if (value > 0.01f) Color(color) else torchTintOff,

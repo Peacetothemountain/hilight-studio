@@ -184,15 +184,13 @@ class TileDialogActivity : ComponentActivity() {
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                // Fast Preset Palette Row
+                                // Controls Row: Color Wheel Expander & White Auto-Select Color
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Color Wheel Expander Toggle Chip
+                                    // 1. Color Wheel Expander Toggle Chip
                                     val rainbowBrush = Brush.sweepGradient(
                                         listOf(
                                             Color.Red, Color.Yellow, Color.Green,
@@ -201,7 +199,7 @@ class TileDialogActivity : ComponentActivity() {
                                     )
                                     Box(
                                         modifier = Modifier
-                                            .size(34.dp)
+                                            .size(36.dp)
                                             .clip(CircleShape)
                                             .background(if (showColorPalette) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest)
                                             .border(
@@ -219,87 +217,47 @@ class TileDialogActivity : ComponentActivity() {
                                             Icons.Rounded.ColorLens,
                                             contentDescription = "Color Wheel",
                                             tint = if (showColorPalette) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(19.dp)
                                         )
                                     }
 
-                                    // Wallpaper Dynamic Color Chip
-                                    val dynamicThemeColor = MaterialTheme.colorScheme.primary
-                                    val isDynamicSelected = color == android.graphics.Color.valueOf(
-                                        dynamicThemeColor.red,
-                                        dynamicThemeColor.green,
-                                        dynamicThemeColor.blue
-                                    ).toArgb()
+                                    // 2. White Auto-Select Color Chip (Pure White Flashlight)
+                                    val whiteColor = 0xFFFFFFFF.toInt()
+                                    val isWhiteSelected = (color and 0x00FFFFFF) == 0x00FFFFFF
+                                    val whiteScale by androidx.compose.animation.core.animateFloatAsState(
+                                        targetValue = if (isWhiteSelected) 1.15f else 1.0f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioLowBouncy,
+                                            stiffness = Spring.StiffnessMediumLow
+                                        ),
+                                        label = "whiteScale"
+                                    )
 
                                     Box(
                                         modifier = Modifier
-                                            .size(34.dp)
+                                            .scale(whiteScale)
+                                            .size(36.dp)
                                             .clip(CircleShape)
-                                            .background(dynamicThemeColor)
+                                            .background(Color.White)
                                             .border(
-                                                width = if (isDynamicSelected) 2.5.dp else 1.dp,
-                                                color = if (isDynamicSelected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                                width = if (isWhiteSelected) 2.5.dp else 1.dp,
+                                                color = if (isWhiteSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                                                 shape = CircleShape
                                             )
                                             .clickable(role = androidx.compose.ui.semantics.Role.Button) {
                                                 PixelHaptics.click(view)
-                                                val argb = android.graphics.Color.valueOf(
-                                                    dynamicThemeColor.red,
-                                                    dynamicThemeColor.green,
-                                                    dynamicThemeColor.blue
-                                                ).toArgb()
-                                                store.setFlashlightColor(argb)
+                                                store.setFlashlightColor(whiteColor)
                                             },
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_flashlight),
-                                            contentDescription = "Dynamic Theme",
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-
-                                    // Curated Lighting & Studio Swatches
-                                    val presets = listOf(
-                                        0xFFFFF3E0.toInt(), // 2700K Candlelight
-                                        0xFFFFF8E7.toInt(), // 3500K Warm White
-                                        0xFFFFFFFF.toInt(), // Pure White
-                                        0xFFE1F5FE.toInt(), // 6500K Daylight
-                                        0xFFFF5252.toInt(), // Coral Red
-                                        0xFFFFAB00.toInt(), // Amber
-                                        0xFF00E676.toInt(), // Emerald
-                                        0xFF00E5FF.toInt(), // Neon Cyan
-                                        0xFF7C4DFF.toInt(), // Purple
-                                    )
-
-                                    presets.forEach { preset ->
-                                        val selected = preset == color
-                                        val scale by androidx.compose.animation.core.animateFloatAsState(
-                                            targetValue = if (selected) 1.15f else 1.0f,
-                                            animationSpec = spring(
-                                                dampingRatio = Spring.DampingRatioLowBouncy,
-                                                stiffness = Spring.StiffnessMediumLow
-                                            ),
-                                            label = "swatchScale"
-                                        )
-
-                                        Box(
-                                            modifier = Modifier
-                                                .scale(scale)
-                                                .size(34.dp)
-                                                .clip(CircleShape)
-                                                .background(Color(preset))
-                                                .border(
-                                                    width = if (selected) 2.5.dp else 1.dp,
-                                                    color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
-                                                    shape = CircleShape
-                                                )
-                                                .clickable(role = androidx.compose.ui.semantics.Role.Button) {
-                                                    PixelHaptics.click(view)
-                                                    store.setFlashlightColor(preset)
-                                                }
-                                        )
+                                        if (isWhiteSelected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color.Black.copy(alpha = 0.55f))
+                                            )
+                                        }
                                     }
                                 }
 
