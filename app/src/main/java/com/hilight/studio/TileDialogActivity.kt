@@ -8,8 +8,14 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,6 +39,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -81,6 +88,7 @@ class TileDialogActivity : ComponentActivity() {
             var showColorPalette by remember { mutableStateOf(false) }
             var colorMode by remember { mutableStateOf(ColorPickerMode.SPECTRUM) } // SPECTRUM or CCT
             var selectedKelvin by remember { mutableIntStateOf(4000) }
+            var whiteTempColor by remember { mutableIntStateOf(0xFFFFFFFF.toInt()) }
 
             HiLightTheme {
                 // Tapping outside the card dismisses
@@ -184,26 +192,81 @@ class TileDialogActivity : ComponentActivity() {
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                // Continuous organic breathing luminous glow animation
+                                val infiniteGlow = rememberInfiniteTransition(label = "luminousGlow")
+                                val glowPulse by infiniteGlow.animateFloat(
+                                    initialValue = 0.55f,
+                                    targetValue = 0.98f,
+                                    animationSpec = infiniteRepeatable(
+                                        animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+                                        repeatMode = RepeatMode.Reverse
+                                    ),
+                                    label = "glowPulse"
+                                )
+                                val glowSpread by infiniteGlow.animateFloat(
+                                    initialValue = 6f,
+                                    targetValue = 11f,
+                                    animationSpec = infiniteRepeatable(
+                                        animation = tween(durationMillis = 1500, easing = FastOutSlowInEasing),
+                                        repeatMode = RepeatMode.Reverse
+                                    ),
+                                    label = "glowSpread"
+                                )
+
+                                val isWhiteActive = (color == whiteTempColor) && !showColorPalette
+                                val isColorWheelActive = (color != whiteTempColor) || showColorPalette
+                                val selectedGlowColor = Color(color)
+                                val whiteGlowColor = Color(whiteTempColor)
+
                                 // Controls Row: Color Wheel Expander & White Auto-Select Color
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                                    horizontalArrangement = Arrangement.spacedBy(22.dp, Alignment.CenterHorizontally),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // 1. Color Wheel Expander Toggle Chip
+                                    // 1. Color Wheel Expander Toggle Chip with Selected Color Luminous Glow
                                     val rainbowBrush = Brush.sweepGradient(
                                         listOf(
                                             Color.Red, Color.Yellow, Color.Green,
                                             Color.Cyan, Color.Blue, Color.Magenta, Color.Red
                                         )
                                     )
+                                    val wheelScale by androidx.compose.animation.core.animateFloatAsState(
+                                        targetValue = if (isColorWheelActive) 1.08f else 1.0f,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioLowBouncy,
+                                            stiffness = Spring.StiffnessMediumLow
+                                        ),
+                                        label = "wheelScale"
+                                    )
+
                                     Box(
                                         modifier = Modifier
-                                            .size(36.dp)
+                                            .scale(wheelScale)
+                                            .size(38.dp)
+                                            .then(
+                                                if (isColorWheelActive) {
+                                                    Modifier.drawBehind {
+                                                        val radius = size.minDimension / 2f
+                                                        drawCircle(
+                                                            brush = Brush.radialGradient(
+                                                                colors = listOf(
+                                                                    selectedGlowColor.copy(alpha = 0.85f * glowPulse),
+                                                                    selectedGlowColor.copy(alpha = 0.45f * glowPulse),
+                                                                    selectedGlowColor.copy(alpha = 0.12f * glowPulse),
+                                                                    Color.Transparent
+                                                                ),
+                                                                center = center,
+                                                                radius = radius + glowSpread.dp.toPx()
+                                                            )
+                                                        )
+                                                    }
+                                                } else Modifier
+                                            )
                                             .clip(CircleShape)
                                             .background(if (showColorPalette) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest)
                                             .border(
-                                                width = if (showColorPalette) 2.5.dp else 1.5.dp,
+                                                width = if (isColorWheelActive) 2.5.dp else 1.5.dp,
                                                 brush = rainbowBrush,
                                                 shape = CircleShape
                                             )
@@ -216,16 +279,14 @@ class TileDialogActivity : ComponentActivity() {
                                         Icon(
                                             Icons.Rounded.ColorLens,
                                             contentDescription = "Color Wheel",
-                                            tint = if (showColorPalette) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(19.dp)
+                                            tint = if (isColorWheelActive) selectedGlowColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
 
-                                    // 2. White Auto-Select Color Chip (Pure White Flashlight)
-                                    val whiteColor = 0xFFFFFFFF.toInt()
-                                    val isWhiteSelected = (color and 0x00FFFFFF) == 0x00FFFFFF
+                                    // 2. White / Temperature Auto-Select Color Chip with Soft Luminous White Halo
                                     val whiteScale by androidx.compose.animation.core.animateFloatAsState(
-                                        targetValue = if (isWhiteSelected) 1.15f else 1.0f,
+                                        targetValue = if (isWhiteActive) 1.08f else 1.0f,
                                         animationSpec = spring(
                                             dampingRatio = Spring.DampingRatioLowBouncy,
                                             stiffness = Spring.StiffnessMediumLow
@@ -236,28 +297,43 @@ class TileDialogActivity : ComponentActivity() {
                                     Box(
                                         modifier = Modifier
                                             .scale(whiteScale)
-                                            .size(36.dp)
+                                            .size(38.dp)
+                                            .then(
+                                                if (isWhiteActive) {
+                                                    Modifier.drawBehind {
+                                                        val radius = size.minDimension / 2f
+                                                        drawCircle(
+                                                            brush = Brush.radialGradient(
+                                                                colors = listOf(
+                                                                    whiteGlowColor.copy(alpha = 0.90f * glowPulse),
+                                                                    whiteGlowColor.copy(alpha = 0.50f * glowPulse),
+                                                                    whiteGlowColor.copy(alpha = 0.15f * glowPulse),
+                                                                    Color.Transparent
+                                                                ),
+                                                                center = center,
+                                                                radius = radius + glowSpread.dp.toPx()
+                                                            )
+                                                        )
+                                                    }
+                                                } else Modifier
+                                            )
                                             .clip(CircleShape)
-                                            .background(Color.White)
+                                            .background(Color(whiteTempColor))
                                             .border(
-                                                width = if (isWhiteSelected) 2.5.dp else 1.dp,
-                                                color = if (isWhiteSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                                width = if (isWhiteActive) 2.5.dp else 1.dp,
+                                                color = if (isWhiteActive) Color.White.copy(alpha = 0.95f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
                                                 shape = CircleShape
                                             )
                                             .clickable(role = androidx.compose.ui.semantics.Role.Button) {
                                                 PixelHaptics.click(view)
-                                                store.setFlashlightColor(whiteColor)
+                                                store.setFlashlightColor(whiteTempColor)
+                                                if (showColorPalette) {
+                                                    showColorPalette = false // Closes the color wheel selector per user request!
+                                                }
                                             },
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        if (isWhiteSelected) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(8.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color.Black.copy(alpha = 0.55f))
-                                            )
-                                        }
+                                        // Clean pure illuminated circle - no dot inside per user request!
                                     }
                                 }
 
@@ -375,6 +451,7 @@ class TileDialogActivity : ComponentActivity() {
                                                     onValueChange = { k ->
                                                         selectedKelvin = k.roundToInt()
                                                         val c = kelvinToRgb(selectedKelvin)
+                                                        whiteTempColor = c
                                                         store.setFlashlightColor(c)
                                                     },
                                                     valueRange = 2000f..7000f,
@@ -385,6 +462,33 @@ class TileDialogActivity : ComponentActivity() {
                                                         inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                                                     )
                                                 )
+
+                                                // Quick CCT Presets
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                                ) {
+                                                    listOf(2700 to "2700K", 4000 to "4000K", 5500 to "5500K", 6500 to "6500K").forEach { (k, label) ->
+                                                        val isCur = selectedKelvin == k
+                                                        Text(
+                                                            text = label,
+                                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                                fontWeight = if (isCur) FontWeight.Bold else FontWeight.Normal
+                                                            ),
+                                                            color = if (isCur) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            modifier = Modifier
+                                                                .clip(CircleShape)
+                                                                .clickable {
+                                                                    PixelHaptics.click(view)
+                                                                    selectedKelvin = k
+                                                                    val c = kelvinToRgb(k)
+                                                                    whiteTempColor = c
+                                                                    store.setFlashlightColor(c)
+                                                                }
+                                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
