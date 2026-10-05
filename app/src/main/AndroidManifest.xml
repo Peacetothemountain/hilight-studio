@@ -19,6 +19,7 @@
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
 
     <!-- Shizuku transport: the user starts Shizuku once per boot, on-device via wireless

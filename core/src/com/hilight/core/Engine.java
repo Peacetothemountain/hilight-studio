@@ -357,8 +357,11 @@ public final class Engine {
     private void loop() {
         while (running) {
             try {
+                long frameStart = elapsedRealtimeClock.nowMs();
                 tick();
-                Thread.sleep(FRAME_MS);
+                long elapsed = elapsedRealtimeClock.nowMs() - frameStart;
+                long sleepMs = Math.max(2, FRAME_MS - elapsed);
+                Thread.sleep(sleepMs);
             } catch (InterruptedException e) {
                 if (!running) return;
                 Log.w("render thread interrupted while active; continuing");

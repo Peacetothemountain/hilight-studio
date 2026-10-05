@@ -26,6 +26,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
+import androidx.compose.ui.platform.LocalView
+
 /**
  * Vertical flashlight slider featuring dynamic expanding light-beam geometry,
  * stepped tactile feedback, and Material You dynamic color integration.
@@ -37,14 +39,14 @@ fun TrapezoidFlashlightSlider(
     color: Int,
     modifier: Modifier = Modifier
 ) {
-    val haptics = LocalHapticFeedback.current
+    val view = LocalView.current
     var lastStep by remember { mutableIntStateOf((value * 10).roundToInt()) }
 
     val animatedValue by animateFloatAsState(
         targetValue = value.coerceIn(0f, 1f),
         animationSpec = spring(
-            dampingRatio = 0.82f,
-            stiffness = Spring.StiffnessMedium
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
         ),
         label = "dynamicBeam"
     )
@@ -54,7 +56,7 @@ fun TrapezoidFlashlightSlider(
         val step = (clamped * 10).roundToInt()
         if (step != lastStep) {
             lastStep = step
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            PixelHaptics.tick(view)
         }
         onValueChange(clamped)
     }

@@ -112,7 +112,7 @@ private fun App(store: Store, startInSetup: Boolean = false) {
     val tab = Tab.entries[tabIndex.coerceIn(0, Tab.entries.lastIndex)]
     val status by store.status.collectAsStateWithLifecycle()
     val active by store.activeTransport.collectAsStateWithLifecycle()
-    val haptics = LocalHapticFeedback.current
+    val view = androidx.compose.ui.platform.LocalView.current
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     // Tied to the lifecycle, not just the composition: a plain LaunchedEffect keeps its coroutine
@@ -165,7 +165,7 @@ private fun App(store: Store, startInSetup: Boolean = false) {
                     NavigationBarItem(
                         selected = tab == t,
                         onClick = {
-                            if (tab != t) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (tab != t) PixelHaptics.click(view)
                             tabIndex = t.ordinal
                         },
                         icon = { Icon(t.icon, contentDescription = stringResource(t.labelRes)) },

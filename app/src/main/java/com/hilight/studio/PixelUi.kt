@@ -68,12 +68,73 @@ import androidx.compose.ui.unit.dp
  * animated status affordances the system UI uses.
  */
 
+import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.view.HapticFeedbackConstants
+import android.view.View
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.mutableFloatStateOf
+import kotlin.math.abs
+
+/**
+ * Pixel-grade precision tactile feedback utilizing Android 17 / Pixel LRA actuators.
+ * Provides crisp tactile clicks for switches, granular ticks for sliders,
+ * and confirms for key activations.
+ */
+object PixelHaptics {
+    fun click(view: View) {
+        if (!view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)) {
+            vibrateFallback(view, VibrationEffect.EFFECT_CLICK)
+        }
+    }
+
+    fun tick(view: View) {
+        if (!view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)) {
+            vibrateFallback(view, VibrationEffect.EFFECT_TICK)
+        }
+    }
+
+    fun toggle(view: View, checked: Boolean) {
+        val constant = if (checked) HapticFeedbackConstants.TOGGLE_ON else HapticFeedbackConstants.TOGGLE_OFF
+        if (!view.performHapticFeedback(constant)) {
+            vibrateFallback(view, if (checked) VibrationEffect.EFFECT_CLICK else VibrationEffect.EFFECT_TICK)
+        }
+    }
+
+    fun heavy(view: View) {
+        if (!view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)) {
+            vibrateFallback(view, VibrationEffect.EFFECT_HEAVY_CLICK)
+        }
+    }
+
+    private fun vibrateFallback(view: View, effectId: Int) {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = view.context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                view.context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+            if (vibrator != null && vibrator.hasVibrator()) {
+                vibrator.vibrate(VibrationEffect.createPredefined(effectId))
+            }
+        } catch (_: Throwable) {}
+    }
+}
+
 /** Pixel's system surfaces squash slightly when touched, on a spring rather than a curve. */
 @Composable
-private fun Modifier.pressSquash(pressed: Boolean, min: Float = 0.965f): Modifier {
+fun Modifier.pressSquash(pressed: Boolean, min: Float = 0.965f): Modifier {
     val scale by animateFloatAsState(
         targetValue = if (pressed) min else 1f,
-        animationSpec = spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
         label = "press",
     )
     return this.scale(scale)
@@ -95,6 +156,7 @@ fun PixelCard(
     }
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val view = LocalView.current
     var base = modifier
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 6.dp)
@@ -102,7 +164,15 @@ fun PixelCard(
         base = base
             .pressSquash(pressed)
             .clip(shape)
-            .clickable(interactionSource = interaction, indication = ripple(), onClick = onClick)
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                role = Role.Button,
+                onClick = {
+                    PixelHaptics.click(view)
+                    onClick()
+                },
+            )
         Box(base.background(color)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 content()
@@ -192,7 +262,7 @@ fun PixelTile(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val haptics = LocalHapticFeedback.current
+    val view = LocalView.current
     val container by animateColorAsState(
         if (enabled) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh,
         label = "tileBg",
@@ -210,8 +280,12 @@ fun PixelTile(
             .pressSquash(pressed, min = 0.94f)
             .clip(MaterialTheme.shapes.large)
             .background(container)
-            .clickable(interactionSource = interaction, indication = ripple()) {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                role = Role.Button,
+            ) {
+                PixelHaptics.click(view)
                 onClick()
             }
             .padding(12.dp),
@@ -245,7 +319,7 @@ fun PixelToggleRow(
     checked: Boolean,
     onChange: (Boolean) -> Unit,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val view = LocalView.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     Row(
@@ -253,9 +327,14 @@ fun PixelToggleRow(
             .fillMaxWidth()
             .pressSquash(pressed, min = 0.98f)
             .clip(MaterialTheme.shapes.medium)
-            .clickable(interactionSource = interaction, indication = ripple()) {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onChange(!checked)
+            .clickable(
+                interactionSource = interaction,
+                indication = ripple(),
+                role = Role.Switch,
+            ) {
+                val next = !checked
+                PixelHaptics.toggle(view, next)
+                onChange(next)
             }
             .padding(vertical = 12.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -283,7 +362,7 @@ fun ToggleRow(
     enabled: Boolean = true,
     onChange: (Boolean) -> Unit,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val view = LocalView.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     Row(
@@ -291,9 +370,15 @@ fun ToggleRow(
             .fillMaxWidth()
             .pressSquash(pressed, min = 0.98f)
             .clip(MaterialTheme.shapes.small)
-            .clickable(interactionSource = interaction, indication = ripple()) {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onChange(!checked)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = ripple(),
+                role = Role.Switch,
+            ) {
+                val next = !checked
+                PixelHaptics.toggle(view, next)
+                onChange(next)
             }
             .padding(vertical = 10.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -310,7 +395,7 @@ fun ToggleRow(
             checked = checked,
             enabled = enabled,
             onCheckedChange = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                PixelHaptics.toggle(view, it)
                 onChange(it)
             },
             modifier = Modifier.scale(0.9f)
@@ -352,6 +437,19 @@ fun PixelSlider(
     // resources now that they have to be translated.
     format: @Composable (Float) -> String = { "%.0f".format(it) },
 ) {
+    val view = LocalView.current
+    var lastTickValue by remember { mutableFloatStateOf(value) }
+    val span = range.endInclusive - range.start
+    val tickStep = remember(span) {
+        when {
+            span <= 1.0f -> 0.05f
+            span <= 10f -> 0.5f
+            span <= 50f -> 1.0f
+            span <= 500f -> 10.0f
+            span <= 5000f -> 100.0f
+            else -> 500.0f
+        }
+    }
     var typing by remember { mutableStateOf(false) }
     val editSecondsLabel = if (typeInSeconds) {
         stringResource(R.string.duration_edit_seconds_action)
@@ -399,7 +497,13 @@ fun PixelSlider(
         }
         Slider(
             value = value,
-            onValueChange = onChange,
+            onValueChange = { newVal ->
+                if (abs(newVal - lastTickValue) >= tickStep) {
+                    lastTickValue = newVal
+                    PixelHaptics.tick(view)
+                }
+                onChange(newVal)
+            },
             valueRange = range,
             colors = SliderDefaults.colors(
                 activeTrackColor = MaterialTheme.colorScheme.primary,
@@ -477,13 +581,13 @@ fun <T> SegmentedSelector(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val view = LocalView.current
     SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth().selectableGroup()) {
         options.forEachIndexed { i, option ->
             SegmentedButton(
                 selected = option == selected,
                 onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    PixelHaptics.click(view)
                     onSelect(option)
                 },
                 shape = SegmentedButtonDefaults.itemShape(index = i, count = options.size),

@@ -33,8 +33,9 @@ object Renderer {
 
             Pattern.BREATHE -> {
                 val phase = (t % speed) / speed.toDouble()
-                val k = (1 - cos(phase * 2 * PI)) / 2
-                for (i in 0 until n) out[i] = scale(base, 0.05 + 0.95 * k)
+                val raw = (1 - cos(phase * 2 * PI)) / 2
+                val k = raw * raw
+                for (i in 0 until n) out[i] = scale(base, 0.04 + 0.96 * k)
             }
 
             Pattern.BLINK -> {
@@ -48,24 +49,73 @@ object Renderer {
             }
 
             Pattern.CHASE -> {
-                val head = ((t / max(1, speed / n)) % n).toInt()
-                for (i in 0 until n) out[i] = if (i == head) base else 0xFF000000.toInt()
+                when (cfg.direction) {
+                    Direction.BILATERAL -> {
+                        val half = (n + 1) / 2
+                        val step = ((t / max(1, speed / half)) % half).toInt()
+                        for (i in 0 until n) {
+                            val distFromCenter = Math.round(abs(i - (n - 1.0) / 2.0) - 0.5).toInt()
+                            out[i] = if (distFromCenter == step) base else 0xFF000000.toInt()
+                        }
+                    }
+                    Direction.REVERSE -> {
+                        val head = ((t / max(1, speed / n)) % n).toInt()
+                        val revHead = (n - 1) - head
+                        for (i in 0 until n) out[i] = if (i == revHead) base else 0xFF000000.toInt()
+                    }
+                    Direction.FORWARD -> {
+                        val head = ((t / max(1, speed / n)) % n).toInt()
+                        for (i in 0 until n) out[i] = if (i == head) base else 0xFF000000.toInt()
+                    }
+                }
             }
 
             Pattern.COMET -> {
-                val pos = (t % speed) / speed.toDouble() * n
-                for (i in 0 until n) {
-                    var d = pos - i
-                    if (d < 0) d += n
-                    out[i] = scale(base, max(0.0, 1 - d / 3.0))
+                val phase = (t % speed) / speed.toDouble()
+                when (cfg.direction) {
+                    Direction.BILATERAL -> {
+                        val half = n / 2.0
+                        val pos = phase * half
+                        for (i in 0 until n) {
+                            val dist = abs(i - (n - 1.0) / 2.0)
+                            var d = pos - dist
+                            if (d < 0) d += half
+                            out[i] = scale(base, max(0.0, 1 - d / 1.5))
+                        }
+                    }
+                    Direction.REVERSE -> {
+                        val pos = phase * n
+                        for (i in 0 until n) {
+                            var d = pos - ((n - 1) - i)
+                            if (d < 0) d += n
+                            out[i] = scale(base, max(0.0, 1 - d / 3.0))
+                        }
+                    }
+                    Direction.FORWARD -> {
+                        val pos = phase * n
+                        for (i in 0 until n) {
+                            var d = pos - i
+                            if (d < 0) d += n
+                            out[i] = scale(base, max(0.0, 1 - d / 3.0))
+                        }
+                    }
                 }
             }
 
             Pattern.WAVE -> {
                 val phase = (t % speed) / speed.toDouble()
                 for (i in 0 until n) {
-                    val k = (1 + sin(2 * PI * (phase + i.toDouble() / n))) / 2
-                    out[i] = scale(base, 0.08 + 0.92 * k)
+                    val posFraction = when (cfg.direction) {
+                        Direction.REVERSE -> (n - 1 - i).toDouble() / n
+                        Direction.BILATERAL -> {
+                            val dist = abs(i - (n - 1.0) / 2.0)
+                            dist / ((n - 1.0) / 2.0)
+                        }
+                        Direction.FORWARD -> i.toDouble() / n
+                    }
+                    val raw = (1 + sin(2 * PI * (phase + posFraction))) / 2
+                    val k = raw * raw
+                    out[i] = scale(base, 0.05 + 0.95 * k)
                 }
             }
 

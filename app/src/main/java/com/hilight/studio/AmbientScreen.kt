@@ -471,16 +471,20 @@ fun PatternCarousel(
                 label = "chipFg",
             )
             val scale by animateFloatAsState(
-                if (isSelected) 1.04f else 1f,
-                spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium),
+                if (isSelected) 1.05f else 1f,
+                spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
                 label = "chipScale",
             )
+            val view = androidx.compose.ui.platform.LocalView.current
             Box(
                 Modifier
                     .scale(scale)
                     .background(bg, CircleShape)
-                    .clickable {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                        PixelHaptics.click(view)
                         onSelect(p)
                     }
                     .padding(horizontal = 18.dp, vertical = 11.dp),
@@ -498,10 +502,13 @@ private fun LedSwatch(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val view = androidx.compose.ui.platform.LocalView.current
     val scale by animateFloatAsState(
-        if (selected) 1.1f else 1f,
-        spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium),
+        if (selected) 1.12f else 1f,
+        spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
         label = "ledSwatch",
     )
     Box(
@@ -515,8 +522,8 @@ private fun LedSwatch(
                 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                 CircleShape,
             )
-            .clickable {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                PixelHaptics.click(view)
                 onClick()
             },
         contentAlignment = Alignment.Center,
@@ -530,7 +537,7 @@ fun DirectionSelector(
     onSelect: (Direction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val view = androidx.compose.ui.platform.LocalView.current
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Caption(stringResource(R.string.direction_label))
         Row(
@@ -558,8 +565,8 @@ fun DirectionSelector(
                     modifier = Modifier
                         .weight(1f)
                         .background(bg, CircleShape)
-                        .clickable {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                            PixelHaptics.click(view)
                             onSelect(dir)
                         }
                         .padding(vertical = 10.dp, horizontal = 4.dp),

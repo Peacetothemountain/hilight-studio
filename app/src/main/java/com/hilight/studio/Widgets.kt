@@ -145,9 +145,13 @@ fun ColorPicker(
         ) {
             PRESET_COLORS.forEach { c ->
                 val selected = c == color
+                val view = androidx.compose.ui.platform.LocalView.current
                 val scale by animateFloatAsState(
                     if (selected) 1.16f else 1f,
-                    spring(dampingRatio = 0.42f, stiffness = Spring.StiffnessMedium),
+                    spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
                     label = "swatch",
                 )
                 Box(
@@ -161,8 +165,8 @@ fun ColorPicker(
                             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
                             CircleShape,
                         )
-                        .clickable {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                            PixelHaptics.click(view)
                             onColor(c)
                         }
                 )
@@ -256,13 +260,15 @@ fun ColorSpectrumWheel(
     val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
 
+    val view = androidx.compose.ui.platform.LocalView.current
+
     Canvas(
         modifier = modifier
             .size(sizeDp.dp)
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = { offset: Offset ->
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        PixelHaptics.click(view)
                         updateColorFromOffset(offset, size.width.toFloat(), hsv[2], onColorChanged)
                     },
                     onDrag = { change, _ ->
@@ -273,7 +279,7 @@ fun ColorSpectrumWheel(
             }
             .pointerInput(Unit) {
                 detectTapGestures { offset: Offset ->
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    PixelHaptics.click(view)
                     updateColorFromOffset(offset, size.width.toFloat(), hsv[2], onColorChanged)
                 }
             }
@@ -392,7 +398,7 @@ fun HexColorPill(
     val hexString = "%06X".format(color and 0xFFFFFF)
     var isEditing by remember { mutableStateOf(false) }
     var textInput by remember(hexString) { mutableStateOf(hexString) }
-    val haptics = LocalHapticFeedback.current
+    val view = androidx.compose.ui.platform.LocalView.current
 
     Row(
         modifier = modifier
@@ -405,8 +411,8 @@ fun HexColorPill(
                 Color(color).copy(alpha = 0.8f),
                 CircleShape,
             )
-            .clickable {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                PixelHaptics.click(view)
                 isEditing = true
             }
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -609,7 +615,7 @@ fun VerticalFlashlightSlider(
     color: Int,
     modifier: Modifier = Modifier
 ) {
-    val haptics = LocalHapticFeedback.current
+    val view = androidx.compose.ui.platform.LocalView.current
     var isDragging by remember { mutableStateOf(false) }
     
     val accent = Color(color)
@@ -645,8 +651,9 @@ fun VerticalFlashlightSlider(
                 }
             }
             .clickable {
-                onValueChange(if (value > 0f) 0f else 1f)
-                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                val next = if (value > 0f) 0f else 1f
+                onValueChange(next)
+                PixelHaptics.toggle(view, next > 0f)
             },
         contentAlignment = Alignment.BottomCenter
     ) {

@@ -587,10 +587,11 @@ private fun RuleCard(
                     }
                 }
             }
+            val view = androidx.compose.ui.platform.LocalView.current
             Switch(
                 checked = rule.enabled,
                 onCheckedChange = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    PixelHaptics.toggle(view, it)
                     onToggle(it)
                 },
             )

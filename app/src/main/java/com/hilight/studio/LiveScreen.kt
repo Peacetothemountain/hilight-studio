@@ -306,19 +306,25 @@ fun Android17FlashlightCard(
     val active by store.flashlightActive.collectAsStateWithLifecycle()
     val color by store.flashlightColor.collectAsStateWithLifecycle()
     val brightness by store.flashlightBrightness.collectAsStateWithLifecycle()
-    val haptics = LocalHapticFeedback.current
+    val view = androidx.compose.ui.platform.LocalView.current
     var showColorPicker by remember { mutableStateOf(false) }
 
     val currentColor = Color(color)
     val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
     val animatedBg by animateColorAsState(
         targetValue = if (active) currentColor.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
         label = "flashlightBg",
     )
     val animatedBeamScale by animateFloatAsState(
         targetValue = if (active) 1.25f else 0.85f,
-        animationSpec = spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMediumLow),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
         label = "beamScale",
     )
     val animatedBeamAlpha by animateFloatAsState(
@@ -335,11 +341,11 @@ fun Android17FlashlightCard(
                 .background(animatedBg)
                 .combinedClickable(
                     onClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        PixelHaptics.toggle(view, !active)
                         store.toggleFlashlight()
                     },
                     onLongClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        PixelHaptics.heavy(view)
                         showColorPicker = true
                     },
                 )
@@ -421,11 +427,17 @@ fun Android17FlashlightCard(
                         .size(32.dp)
                         .clip(CircleShape)
                         .background(currentColor)
-                        .clickable { showColorPicker = true }
+                        .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                            PixelHaptics.click(view)
+                            showColorPicker = true
+                        }
                 )
                 androidx.compose.material3.Switch(
                     checked = active,
-                    onCheckedChange = { store.setFlashlight(it) },
+                    onCheckedChange = {
+                        PixelHaptics.toggle(view, it)
+                        store.setFlashlight(it)
+                    },
                 )
             }
         }
@@ -443,6 +455,45 @@ fun Android17FlashlightCard(
                     onChange = { store.setFlashlightBrightness(it) },
                     format = { "%.0f%%".format(it * 100f) },
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val presets = listOf(0.25f, 0.50f, 0.75f, 1.0f)
+                    presets.forEach { preset ->
+                        val isSelected = kotlin.math.abs(brightness - preset) < 0.05f
+                        val bg by animateColorAsState(
+                            if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerHighest,
+                            label = "presetBg",
+                        )
+                        val fg by animateColorAsState(
+                            if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                            label = "presetFg",
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(CircleShape)
+                                .background(bg)
+                                .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                                    PixelHaptics.tick(view)
+                                    store.setFlashlightBrightness(preset)
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "%.0f%%".format(preset * 100f),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = fg,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

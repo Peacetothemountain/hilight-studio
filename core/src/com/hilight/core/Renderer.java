@@ -65,8 +65,10 @@ public final class Renderer {
 
             case "breathe": {
                 double phase = (t % speed) / (double) speed;
-                double k = (1 - Math.cos(phase * 2 * Math.PI)) / 2;
-                for (int i = 0; i < n; i++) out[i] = scale(palette[i % palette.length], 0.05 + 0.95 * k);
+                double raw = (1 - Math.cos(phase * 2 * Math.PI)) / 2;
+                // Perceptual gamma 2.0 curve: aligns with human visual perception (CIE 1931)
+                double k = raw * raw;
+                for (int i = 0; i < n; i++) out[i] = scale(palette[i % palette.length], 0.04 + 0.96 * k);
                 break;
             }
 
@@ -148,8 +150,9 @@ public final class Renderer {
                     } else {
                         posFraction = (double) i / n;
                     }
-                    double k = (1 + Math.sin(2 * Math.PI * (phase + posFraction))) / 2;
-                    out[i] = scale(palette[i % palette.length], 0.08 + 0.92 * k);
+                    double raw = (1 + Math.sin(2 * Math.PI * (phase + posFraction))) / 2;
+                    double k = raw * raw;
+                    out[i] = scale(palette[i % palette.length], 0.05 + 0.95 * k);
                 }
                 break;
             }
