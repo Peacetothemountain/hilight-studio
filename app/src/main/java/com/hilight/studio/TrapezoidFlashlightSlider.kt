@@ -4,8 +4,10 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -18,19 +20,18 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
-import androidx.compose.ui.platform.LocalView
-
 /**
- * Vertical flashlight slider featuring dynamic expanding light-beam geometry,
- * stepped tactile feedback, and Material You dynamic color integration.
+ * Pixel 11 1-for-1 Trapezoid Flashlight Strength Slider:
+ * Implements Google's exact AOSP SystemUI specs (Specs.TRACK_LENGTH=140dp,
+ * MIN_TRACK_HEIGHT=22dp, MAX_TRACK_HEIGHT=80dp, THUMB_WIDTH=4dp),
+ * with perceptual luminous beam diffusion, stepped tactile haptics,
+ * and the iconic animated Pixel flashlight torch.
  */
 @Composable
 fun TrapezoidFlashlightSlider(
@@ -61,23 +62,38 @@ fun TrapezoidFlashlightSlider(
         onValueChange(clamped)
     }
 
+    // Geometry constants from Google SystemUI Specs
+    val trackLengthDp = 140.dp
+    val minTrackWidthDp = 22.dp
+    val maxTrackWidthDp = 80.dp
+    val torchIconSizeDp = 34.dp
+    val totalHeightDp = trackLengthDp + torchIconSizeDp + 16.dp
+    val restingBarColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
+    val torchTintOff = MaterialTheme.colorScheme.onSurfaceVariant
+
     Box(
         modifier = modifier
-            .width(115.dp)
-            .height(175.dp)
+            .width(maxTrackWidthDp + 40.dp)
+            .height(totalHeightDp)
             .pointerInput(Unit) {
                 detectDragGestures { change, _ ->
                     change.consume()
-                    val effectiveH = size.height.toFloat() - 38.dp.toPx()
-                    val touchY = change.position.y - 4.dp.toPx()
-                    updateValue(1f - (touchY / effectiveH))
+                    val totalH = size.height.toFloat()
+                    val trackPx = trackLengthDp.toPx()
+                    val emitterY = totalH - torchIconSizeDp.toPx() - 4.dp.toPx()
+                    val touchY = change.position.y
+                    val fraction = ((emitterY - touchY) / trackPx).coerceIn(0f, 1f)
+                    updateValue(fraction)
                 }
             }
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
-                    val effectiveH = size.height.toFloat() - 38.dp.toPx()
-                    val touchY = offset.y - 4.dp.toPx()
-                    updateValue(1f - (touchY / effectiveH))
+                    val totalH = size.height.toFloat()
+                    val trackPx = trackLengthDp.toPx()
+                    val emitterY = totalH - torchIconSizeDp.toPx() - 4.dp.toPx()
+                    val touchY = offset.y
+                    val fraction = ((emitterY - touchY) / trackPx).coerceIn(0f, 1f)
+                    updateValue(fraction)
                 }
             },
         contentAlignment = Alignment.BottomCenter
@@ -86,86 +102,106 @@ fun TrapezoidFlashlightSlider(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 32.dp)
+                .padding(bottom = torchIconSizeDp + 2.dp)
         ) {
             val w = size.width
             val h = size.height
-            val bottomW = w * 0.20f
-            val maxTopW = w * 0.82f
+            val bottomW = minTrackWidthDp.toPx()
+            val maxTopW = maxTrackWidthDp.toPx()
+            val trackPx = trackLengthDp.toPx()
+
+            val baseTint = Color(color)
 
             if (animatedValue > 0.005f) {
-                val barY = h * (1f - animatedValue)
+                val curTopY = h - (trackPx * animatedValue)
                 val curTopW = bottomW + (maxTopW - bottomW) * animatedValue
-                val baseTint = Color(color)
 
-                // 1. Dynamic light beam path that expands from torch base to current bar height
-                val dynamicBeamPath = Path().apply {
+                // 1. Expanding light cone path (Trapezoid from torch emitter to current thumb height)
+                val beamPath = Path().apply {
                     moveTo((w - bottomW) / 2f, h)
                     lineTo((w + bottomW) / 2f, h)
-                    lineTo((w + curTopW) / 2f, barY)
-                    quadraticTo(w / 2f, barY - 3.dp.toPx() * animatedValue, (w - curTopW) / 2f, barY)
+                    lineTo((w + curTopW) / 2f, curTopY)
+                    // Soft curvature across top edge
+                    quadraticTo(w / 2f, curTopY - 2.dp.toPx() * animatedValue, (w - curTopW) / 2f, curTopY)
                     close()
                 }
 
-                // 2. Luminous beam glow gradient
+                // 2. Luminous beam vertical & radial gradient (dense glow at emitter, soft diffusion at thumb)
                 val beamGradient = Brush.verticalGradient(
                     colors = listOf(
-                        baseTint.copy(alpha = 0.35f),
-                        baseTint.copy(alpha = 0.70f),
-                        baseTint.copy(alpha = 0.95f)
+                        baseTint.copy(alpha = 0.35f * animatedValue),
+                        baseTint.copy(alpha = 0.65f * animatedValue),
+                        baseTint.copy(alpha = 0.90f * animatedValue),
                     ),
-                    startY = barY,
+                    startY = curTopY,
                     endY = h
                 )
 
                 // Draw expanding light beam
                 drawPath(
-                    path = dynamicBeamPath,
+                    path = beamPath,
                     brush = beamGradient
                 )
 
-                // 3. Glowing edge halo
+                // 3. Subtle edge halo
                 drawPath(
-                    path = dynamicBeamPath,
-                    color = Color.White.copy(alpha = 0.22f * animatedValue),
+                    path = beamPath,
+                    color = Color.White.copy(alpha = 0.18f * animatedValue),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(
-                        width = 1.5.dp.toPx(),
-                        cap = StrokeCap.Round
+                        width = 1.2.dp.toPx()
                     )
                 )
 
-                // 4. Horizontal Level Bar across top of beam
-                val barLeft = (w - curTopW) / 2f
-                val barWidth = curTopW
-                val barThickness = 3.5.dp.toPx()
+                // 4. Horizontal Level Bar (Thumb) across top of beam
+                val thumbWidth = curTopW + 4.dp.toPx()
+                val thumbHeight = 4.dp.toPx()
 
+                // Glow behind thumb
+                drawRoundRect(
+                    color = baseTint.copy(alpha = 0.45f * animatedValue),
+                    topLeft = Offset((w - thumbWidth) / 2f - 2.dp.toPx(), curTopY - thumbHeight / 2f - 1.dp.toPx()),
+                    size = Size(thumbWidth + 4.dp.toPx(), thumbHeight + 2.dp.toPx()),
+                    cornerRadius = CornerRadius(thumbHeight, thumbHeight)
+                )
+
+                // Crisp thumb capsule
                 drawRoundRect(
                     color = Color.White.copy(alpha = 0.95f),
-                    topLeft = Offset(barLeft, barY - barThickness / 2f),
-                    size = Size(barWidth, barThickness),
-                    cornerRadius = CornerRadius(barThickness / 2f, barThickness / 2f)
+                    topLeft = Offset((w - thumbWidth) / 2f, curTopY - thumbHeight / 2f),
+                    size = Size(thumbWidth, thumbHeight),
+                    cornerRadius = CornerRadius(thumbHeight / 2f, thumbHeight / 2f)
                 )
             } else {
-                // Resting bar right above torch
-                val barThickness = 3.5.dp.toPx()
-                val restingW = bottomW * 1.3f
+                // Resting level bar resting just above the torch nozzle when off
+                val thumbHeight = 3.5.dp.toPx()
+                val restingW = bottomW * 1.25f
                 drawRoundRect(
-                    color = Color.White.copy(alpha = 0.35f),
-                    topLeft = Offset((w - restingW) / 2f, h - barThickness),
-                    size = Size(restingW, barThickness),
-                    cornerRadius = CornerRadius(barThickness / 2f, barThickness / 2f)
+                    color = restingBarColor,
+                    topLeft = Offset((w - restingW) / 2f, h - thumbHeight),
+                    size = Size(restingW, thumbHeight),
+                    cornerRadius = CornerRadius(thumbHeight / 2f, thumbHeight / 2f)
                 )
             }
         }
 
-        // Clean Flashlight Torch Icon (30dp, strictly uses user's dynamic Material You primary wallpaper theme)
+        // Clean Google Pixel Flashlight Torch Icon (active vs off switch position)
         Icon(
-            painter = painterResource(R.drawable.ic_flashlight_torch),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            painter = painterResource(
+                if (value > 0.01f) R.drawable.ic_flashlight else R.drawable.ic_flashlight_off
+            ),
+            contentDescription = "Flashlight Torch",
+            tint = if (value > 0.01f) Color(color) else torchTintOff,
             modifier = Modifier
-                .padding(bottom = 0.dp)
-                .size(30.dp)
+                .size(torchIconSizeDp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {
+                        val next = if (value > 0.01f) 0f else 1f
+                        PixelHaptics.toggle(view, next > 0f)
+                        onValueChange(next)
+                    }
+                )
         )
     }
 }

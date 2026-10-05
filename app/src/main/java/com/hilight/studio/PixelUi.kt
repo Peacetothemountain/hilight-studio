@@ -91,6 +91,12 @@ object PixelHaptics {
         }
     }
 
+    fun confirm(view: View) {
+        if (!view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)) {
+            vibrateFallback(view, VibrationEffect.EFFECT_CLICK)
+        }
+    }
+
     fun tick(view: View) {
         if (!view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)) {
             vibrateFallback(view, VibrationEffect.EFFECT_TICK)

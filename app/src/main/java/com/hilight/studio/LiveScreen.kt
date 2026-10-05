@@ -38,6 +38,8 @@ import androidx.compose.material.icons.rounded.Flare
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Nightlight
 import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.rounded.Radar
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Waves
@@ -363,44 +365,18 @@ fun Android17FlashlightCard(
                     modifier = Modifier
                         .size(46.dp)
                         .background(
-                            if (active) currentColor.copy(alpha = 0.30f)
+                            if (active) currentColor.copy(alpha = 0.25f)
                             else MaterialTheme.colorScheme.surfaceContainerHighest,
                             CircleShape,
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Canvas(Modifier.size(34.dp)) {
-                        val cx = size.width / 2f
-                        val cy = size.height / 2f
-                        if (active) {
-                            // Flashlight radiating light cone rays (Android 17 animation)
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    listOf(
-                                        currentColor.copy(alpha = 0.75f * animatedBeamAlpha),
-                                        Color.Transparent,
-                                    ),
-                                    center = Offset(cx, cy),
-                                    radius = size.width * 0.75f * animatedBeamScale,
-                                ),
-                                radius = size.width * 0.75f * animatedBeamScale,
-                                center = Offset(cx, cy),
-                            )
-                        }
-                        // Core Flashlight Icon
-                        drawCircle(
-                            if (active) currentColor else inactiveColor,
-                            radius = size.width * 0.28f,
-                            center = Offset(cx, cy),
-                        )
-                        if (active) {
-                            drawCircle(
-                                Color.White,
-                                radius = size.width * 0.12f,
-                                center = Offset(cx, cy),
-                            )
-                        }
-                    }
+                    Icon(
+                        painter = painterResource(if (active) R.drawable.ic_flashlight else R.drawable.ic_flashlight_off),
+                        contentDescription = null,
+                        tint = if (active) currentColor else inactiveColor,
+                        modifier = Modifier.size(26.dp)
+                    )
                 }
 
                 Column {
