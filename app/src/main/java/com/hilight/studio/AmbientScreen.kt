@@ -48,18 +48,15 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -158,19 +155,24 @@ fun AmbientScreen(store: Store) {
                             LedSwatch(
                                 color = c,
                                 selected = i == editingLed,
+                                label = stringResource(R.string.style_led_number, i + 1),
                                 modifier = Modifier.weight(1f),
                             ) { editingLed = i }
                         }
                     }
+                    val safeEditingLed = editingLed.coerceIn(0, (ambient.perLed.size - 1).coerceAtLeast(0))
                     ColorPicker(
-                        color = ambient.perLed.getOrElse(editingLed) { ambient.color },
+                        color = ambient.perLed.getOrElse(safeEditingLed) { ambient.color },
                         onColor = { c ->
-                            store.setAmbient(
-                                ambient.copy(
-                                    perLed = ambient.perLed.toMutableList().also { it[editingLed] = c })
-                            )
+                            if (ambient.perLed.isNotEmpty()) {
+                                store.setAmbient(
+                                    ambient.copy(
+                                        perLed = ambient.perLed.toMutableList().also { it[safeEditingLed] = c }
+                                    )
+                                )
+                            }
                         },
-                        label = stringResource(R.string.style_led_number, editingLed + 1),
+                        label = stringResource(R.string.style_led_number, safeEditingLed + 1),
                     )
                     PixelSlider(
                         stringResource(R.string.style_rotate_around_array),
@@ -419,10 +421,10 @@ fun AmbientScreen(store: Store) {
 private fun PresetsCard(store: Store) {
     val ctx = LocalContext.current
     val presets by store.presets.collectAsStateWithLifecycle()
-    var naming by remember { mutableStateOf(false) }
-    var importing by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    var importText by remember { mutableStateOf("") }
+    var naming by rememberSaveable { mutableStateOf(false) }
+    var importing by rememberSaveable { mutableStateOf(false) }
+    var name by rememberSaveable { mutableStateOf("") }
+    var importText by rememberSaveable { mutableStateOf("") }
 
     PixelCard {
         SectionTitle(
@@ -552,9 +554,11 @@ private fun shareText(ctx: android.content.Context, text: String) {
         type = "text/plain"
         putExtra(android.content.Intent.EXTRA_TEXT, text)
     }
-    ctx.startActivity(
-        android.content.Intent.createChooser(send, ctx.getString(R.string.style_export_chooser))
-    )
+    runCatching {
+        ctx.startActivity(
+            android.content.Intent.createChooser(send, ctx.getString(R.string.style_export_chooser))
+        )
+    }
 }
 
 /** Scrolling pattern picker whose selection animates in colour and size. */
@@ -564,7 +568,6 @@ fun PatternCarousel(
     options: List<Pattern>,
     onSelect: (Pattern) -> Unit,
 ) {
-    val haptics = LocalHapticFeedback.current
     val listState = rememberLazyListState()
 
     // keep the current pattern on screen, including when it is restored from settings
@@ -619,6 +622,7 @@ fun PatternCarousel(
 private fun LedSwatch(
     color: Int,
     selected: Boolean,
+    label: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -642,6 +646,7 @@ private fun LedSwatch(
                 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                 CircleShape,
             )
+            .semantics { contentDescription = label }
             .clickable(role = androidx.compose.ui.semantics.Role.Button) {
                 PixelHaptics.click(view)
                 onClick()

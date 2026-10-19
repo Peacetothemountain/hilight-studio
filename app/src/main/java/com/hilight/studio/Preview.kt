@@ -21,14 +21,18 @@ object Renderer {
         val out = IntArray(n)
         val base = colorOverride ?: cfg.color
         val speed = max(60, cfg.speedMs).toLong()
-        val t = tMs
+        val t = max(0L, tMs)
 
         when (pattern) {
             Pattern.OFF -> Unit
             Pattern.SOLID -> for (i in 0 until n) out[i] = base
             Pattern.CUSTOM -> {
-                val shift = if (cfg.rotateMs >= 50) ((t / cfg.rotateMs) % n).toInt() else 0
-                for (i in 0 until n) out[i] = cfg.perLed[((i + shift) % n) % cfg.perLed.size]
+                if (cfg.perLed.isNotEmpty()) {
+                    val shift = if (cfg.rotateMs >= 50) ((t / cfg.rotateMs) % n).toInt() else 0
+                    for (i in 0 until n) out[i] = cfg.perLed[((i + shift) % n) % cfg.perLed.size]
+                } else {
+                    for (i in 0 until n) out[i] = base
+                }
             }
             Pattern.GRADIENT -> {
                 val shift = if (cfg.rotateMs >= 50) ((t / cfg.rotateMs) % n).toInt() else 0
@@ -260,10 +264,13 @@ object Renderer {
     }
 
     fun hsv(h: Float, s: Float = 1f, v: Float = 1f): Int {
-        val c = v * s
-        val x = c * (1 - abs((h / 60f) % 2 - 1))
-        val m = v - c
-        val (r, g, b) = when (((h / 60).toInt()) % 6) {
+        val nh = ((h % 360f) + 360f) % 360f
+        val ns = s.coerceIn(0f, 1f)
+        val nv = v.coerceIn(0f, 1f)
+        val c = nv * ns
+        val x = c * (1 - abs((nh / 60f) % 2 - 1))
+        val m = nv - c
+        val (r, g, b) = when (((nh / 60).toInt()) % 6) {
             0 -> Triple(c, x, 0f)
             1 -> Triple(x, c, 0f)
             2 -> Triple(0f, c, x)
@@ -271,9 +278,9 @@ object Renderer {
             4 -> Triple(x, 0f, c)
             else -> Triple(c, 0f, x)
         }
-        return (0xFF shl 24) or
-            (((r + m) * 255).toInt() shl 16) or
-            (((g + m) * 255).toInt() shl 8) or
-            ((b + m) * 255).toInt()
+        val ri = ((r + m) * 255).toInt().coerceIn(0, 255)
+        val gi = ((g + m) * 255).toInt().coerceIn(0, 255)
+        val bi = ((b + m) * 255).toInt().coerceIn(0, 255)
+        return (0xFF shl 24) or (ri shl 16) or (gi shl 8) or bi
     }
 }

@@ -41,7 +41,9 @@ fun TrapezoidFlashlightSlider(
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
     var lastStep by remember { mutableIntStateOf((value * 10).roundToInt()) }
+    val beamPath = remember { Path() }
 
     val animatedValue by animateFloatAsState(
         targetValue = value.coerceIn(0f, 1f),
@@ -59,7 +61,7 @@ fun TrapezoidFlashlightSlider(
             lastStep = step
             PixelHaptics.tick(view)
         }
-        onValueChange(clamped)
+        currentOnValueChange(clamped)
     }
 
     // Geometry constants from Google SystemUI Specs
@@ -117,7 +119,8 @@ fun TrapezoidFlashlightSlider(
                 val curTopW = bottomW + (maxTopW - bottomW) * animatedValue
 
                 // 1. Expanding light cone path (Trapezoid from torch emitter to current thumb height)
-                val beamPath = Path().apply {
+                beamPath.reset()
+                beamPath.apply {
                     moveTo((w - bottomW) / 2f, h)
                     lineTo((w + bottomW) / 2f, h)
                     lineTo((w + curTopW) / 2f, curTopY)

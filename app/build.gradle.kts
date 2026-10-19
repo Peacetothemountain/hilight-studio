@@ -17,7 +17,8 @@ val releaseKeystore = Properties().apply {
 }
 
 fun signingValue(key: String, env: String): String? =
-    releaseKeystore.getProperty(key) ?: System.getenv(env)
+    releaseKeystore.getProperty(key)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(env)?.takeIf { it.isNotBlank() }
 
 android {
     namespace = "com.hilight.studio"
@@ -37,11 +38,17 @@ android {
     signingConfigs {
         create("release") {
             val store = signingValue("storeFile", "HILIGHT_STORE_FILE")
-            if (store != null) {
-                storeFile = file(store)
-                storePassword = signingValue("storePassword", "HILIGHT_STORE_PASSWORD")
-                keyAlias = signingValue("keyAlias", "HILIGHT_KEY_ALIAS")
-                keyPassword = signingValue("keyPassword", "HILIGHT_KEY_PASSWORD")
+            val storePass = signingValue("storePassword", "HILIGHT_STORE_PASSWORD")
+            val alias = signingValue("keyAlias", "HILIGHT_KEY_ALIAS")
+            val keyPass = signingValue("keyPassword", "HILIGHT_KEY_PASSWORD")
+            if (store != null && storePass != null && alias != null && keyPass != null) {
+                val candidate = file(store)
+                if (candidate.isFile) {
+                    storeFile = candidate
+                    storePassword = storePass
+                    keyAlias = alias
+                    keyPassword = keyPass
+                }
             }
         }
     }

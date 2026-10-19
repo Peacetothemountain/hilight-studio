@@ -128,6 +128,10 @@ fun ColorPicker(
     val hsv = remember(color) {
         FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) }
     }
+    var retainedHue by remember { androidx.compose.runtime.mutableFloatStateOf(hsv[0]) }
+    if (hsv[1] > 0.001f) {
+        retainedHue = hsv[0]
+    }
     val view = LocalView.current
     var showWheelDialog by remember { mutableStateOf(false) }
     var showCctRow by remember { mutableStateOf(false) }
@@ -363,10 +367,13 @@ fun ColorPicker(
                     .background(hueBrush, CircleShape)
             )
             Slider(
-                value = hsv[0],
+                value = retainedHue,
                 valueRange = 0f..359f,
                 onValueChange = { h ->
-                    onColor(android.graphics.Color.HSVToColor(floatArrayOf(h, hsv[1], hsv[2])))
+                    retainedHue = h
+                    val s = if (hsv[1] < 0.01f) 1f else hsv[1]
+                    val v = if (hsv[2] < 0.05f) 1f else hsv[2]
+                    onColor(android.graphics.Color.HSVToColor(floatArrayOf(h, s, v)))
                 },
                 colors = SliderDefaults.colors(
                     thumbColor = Color.White,
@@ -379,10 +386,11 @@ fun ColorPicker(
         }
 
         PixelSlider(stringResource(R.string.widget_saturation), hsv[1], 0f..1f, { s ->
-            onColor(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], s, hsv[2])))
+            val v = if (hsv[2] < 0.05f) 1f else hsv[2]
+            onColor(android.graphics.Color.HSVToColor(floatArrayOf(retainedHue, s, v)))
         }) { stringResource(R.string.widget_percent, (it * 100).toInt()) }
         PixelSlider(stringResource(R.string.widget_intensity), hsv[2], 0.05f..1f, { v ->
-            onColor(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], v)))
+            onColor(android.graphics.Color.HSVToColor(floatArrayOf(retainedHue, hsv[1], v)))
         }) { stringResource(R.string.widget_percent, (it * 100).toInt()) }
     }
 
@@ -487,10 +495,12 @@ fun ColorSpectrumWheel(
                 }
             }
     ) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         val cx = size.width / 2f
         val cy = size.height / 2f
-        val outerRadius = size.width / 2f - outerInsetPx
-        val innerRadius = outerRadius * 0.48f
+        val outerRadius = (minOf(size.width, size.height) / 2f - outerInsetPx).coerceAtLeast(1f)
+        val innerRadius = (outerRadius * 0.48f).coerceAtLeast(1f)
+        val centerDiscRadius = (innerRadius - 6.dp.toPx()).coerceAtLeast(1f)
 
         // 1. Hue sweep gradient on the outer spectrum ring
         drawCircle(
@@ -520,12 +530,12 @@ fun ColorSpectrumWheel(
         // 4. Live Color Center Disc
         drawCircle(
             color = Color(color),
-            radius = innerRadius - 6.dp.toPx(),
+            radius = centerDiscRadius,
             center = Offset(cx, cy),
         )
         drawCircle(
             color = outlineColor,
-            radius = innerRadius - 6.dp.toPx(),
+            radius = centerDiscRadius,
             center = Offset(cx, cy),
             style = Stroke(width = 1.5.dp.toPx()),
         )
@@ -673,6 +683,7 @@ fun HexColorPill(
             },
             confirmButton = {
                 TextButton(
+                    enabled = textInput.length == 6,
                     onClick = {
                         val parsed = runCatching {
                             android.graphics.Color.parseColor("#$textInput")

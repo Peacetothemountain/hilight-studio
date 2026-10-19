@@ -31,6 +31,8 @@ internal object GitHubUpdateChecker {
     private const val RELEASES_PAGE =
         "https://github.com/Peacetothemountain/hilight-studio/releases/tag/"
 
+    internal const val MAX_RESPONSE_CHARS = 512 * 1024
+
     fun check(currentVersionName: String): UpdateCheckResult {
         var connection: HttpURLConnection? = null
         return try {
@@ -47,8 +49,8 @@ internal object GitHubUpdateChecker {
                 UpdateCheckResult.Failed
             } else {
                 val response = connection.inputStream.bufferedReader(Charsets.UTF_8).use {
-                    it.readText()
-                }
+                    readBoundedText(it)
+                } ?: return UpdateCheckResult.Failed
                 resolve(currentVersionName, response)
             }
         } catch (_: Exception) {
@@ -56,6 +58,18 @@ internal object GitHubUpdateChecker {
         } finally {
             connection?.disconnect()
         }
+    }
+
+    internal fun readBoundedText(reader: java.io.Reader): String? {
+        val builder = StringBuilder()
+        val buffer = CharArray(4096)
+        while (true) {
+            val read = reader.read(buffer)
+            if (read < 0) break
+            if (builder.length + read > MAX_RESPONSE_CHARS) return null
+            builder.append(buffer, 0, read)
+        }
+        return builder.toString()
     }
 
     internal fun resolve(
@@ -79,10 +93,15 @@ internal object GitHubUpdateChecker {
                     for (i in 0 until assets.length()) {
                         val asset = assets.optJSONObject(i) ?: continue
                         val name = asset.optString("name", "")
-                        if (name.endsWith(".apk", ignoreCase = true)) {
-                            apkUrl = asset.optString("browser_download_url")
+                        if (name.endsWith(".apk", ignoreCase = true) &&
+                            !name.endsWith("-unsigned.apk", ignoreCase = true)
+                        ) {
+                            val candidate = asset.optString("browser_download_url")
                                 .takeIf { isTrustedApkUrl(it) }
-                            break
+                            if (candidate != null) {
+                                apkUrl = candidate
+                                break
+                            }
                         }
                     }
                 }
@@ -111,6 +130,7 @@ internal object GitHubUpdateChecker {
         val parsed = URL(rawUrl)
         val host = parsed.host?.lowercase() ?: ""
         parsed.protocol.equals("https", ignoreCase = true) &&
+            parsed.userInfo == null &&
             (host == "github.com" ||
                 host.endsWith(".github.com") ||
                 host == "objects.githubusercontent.com" ||
@@ -150,9 +170,29 @@ internal object GitHubUpdateChecker {
             )
             if (base != 0) return base
             if (stabilityRank == 0) {
-                return (prerelease ?: "").compareTo(other.prerelease ?: "", ignoreCase = true)
+                return comparePrerelease(prerelease ?: "", other.prerelease ?: "")
             }
             return 0
+        }
+
+        private fun comparePrerelease(left: String, right: String): Int {
+            val leftParts = left.split('.')
+            val rightParts = right.split('.')
+            val limit = minOf(leftParts.size, rightParts.size)
+            for (i in 0 until limit) {
+                val a = leftParts[i]
+                val b = rightParts[i]
+                val aNum = a.toLongOrNull()
+                val bNum = b.toLongOrNull()
+                val cmp = when {
+                    aNum != null && bNum != null -> aNum.compareTo(bNum)
+                    aNum != null -> -1
+                    bNum != null -> 1
+                    else -> a.compareTo(b, ignoreCase = true)
+                }
+                if (cmp != 0) return cmp
+            }
+            return leftParts.size.compareTo(rightParts.size)
         }
 
         companion object {

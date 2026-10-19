@@ -52,4 +52,82 @@ class GlyphPatternsTest {
             assertArrayEquals(frame.reversedArray(), frame)
         }
     }
+
+    @Test
+    fun `negative tMs across patterns clamps to zero and never throws IndexOutOfBoundsException`() {
+        val testedPatterns = listOf(
+            Pattern.CUSTOM,
+            Pattern.GRADIENT,
+            Pattern.CHASE,
+            Pattern.COMET,
+            Pattern.RADAR,
+            Pattern.RAINBOW,
+        )
+        for (pattern in testedPatterns) {
+            for (direction in Direction.entries) {
+                val cfg = Ambient(
+                    pattern = pattern,
+                    color = 0xFF00E5FF.toInt(),
+                    secondColor = 0xFFFF1744.toInt(),
+                    rotateMs = 100,
+                    speedMs = 1000,
+                    direction = direction,
+                )
+                val negFrame = Renderer.frame(pattern, -500L, cfg)
+                val zeroFrame = Renderer.frame(pattern, 0L, cfg)
+                assertEquals(LED_COUNT, negFrame.size)
+                assertArrayEquals("pattern=$pattern dir=$direction", zeroFrame, negFrame)
+            }
+        }
+    }
+
+    @Test
+    fun `custom pattern with empty perLed never throws ArithmeticException and falls back cleanly`() {
+        val fallbackColor = 0xFF20E676.toInt()
+        val cfg = Ambient(
+            pattern = Pattern.CUSTOM,
+            color = fallbackColor,
+            perLed = emptyList(),
+            rotateMs = 100,
+            brightness = 1f,
+        )
+        val result = Renderer.frame(Pattern.CUSTOM, 250L, cfg)
+        assertEquals(LED_COUNT, result.size)
+        assertTrue(result.all { it == fallbackColor })
+    }
+
+    @Test
+    fun `hsv with negative hue and out of range saturation or value produces valid opaque ARGB`() {
+        assertEquals(Renderer.hsv(300f, 1f, 1f), Renderer.hsv(-60f, 1f, 1f))
+        assertEquals(Renderer.hsv(300f, 1f, 1f), Renderer.hsv(-420f, 1f, 1f))
+        assertEquals(0xFFFFFFFF.toInt(), Renderer.hsv(120f, -0.5f, 1.5f))
+        assertEquals(0xFF000000.toInt(), Renderer.hsv(120f, 1.5f, -0.5f))
+
+        for (h in listOf(-420f, -60f, 0f, 180f, 720f)) {
+            for (s in listOf(-0.5f, 0f, 0.5f, 1f, 1.5f)) {
+                for (v in listOf(-0.5f, 0f, 0.5f, 1f, 1.5f)) {
+                    val argb = Renderer.hsv(h, s, v)
+                    assertEquals(0xFF, (argb ushr 24) and 0xFF)
+                    assertTrue(((argb ushr 16) and 0xFF) in 0..255)
+                    assertTrue(((argb ushr 8) and 0xFF) in 0..255)
+                    assertTrue((argb and 0xFF) in 0..255)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `kelvinToRgb with extreme inputs produces valid opaque ARGB colors`() {
+        val inputs = listOf(0, -1000, 2000, 6500, 100_000)
+        for (kelvin in inputs) {
+            val argb = TileDialogActivity.kelvinToRgb(kelvin)
+            assertEquals("Opaque alpha for kelvin=$kelvin", 0xFF, (argb ushr 24) and 0xFF)
+            assertTrue(((argb ushr 16) and 0xFF) in 0..255)
+            assertTrue(((argb ushr 8) and 0xFF) in 0..255)
+            assertTrue((argb and 0xFF) in 0..255)
+        }
+        assertEquals(TileDialogActivity.kelvinToRgb(1000), TileDialogActivity.kelvinToRgb(0))
+        assertEquals(TileDialogActivity.kelvinToRgb(1000), TileDialogActivity.kelvinToRgb(-1000))
+        assertEquals(TileDialogActivity.kelvinToRgb(40_000), TileDialogActivity.kelvinToRgb(100_000))
+    }
 }

@@ -702,7 +702,7 @@ class TileDialogActivity : ComponentActivity() {
          * according to Tanner Helland's algorithm.
          */
         fun kelvinToRgb(kelvin: Int): Int {
-            val temp = kelvin / 100.0
+            val temp = kelvin.coerceIn(1000, 40000) / 100.0
             val red: Double
             val green: Double
             val blue: Double

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.content.pm.PackageManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -18,35 +19,40 @@ object AppColor {
     }
 
     /** Package queries, drawing and sampling all run off the UI thread; concurrent requests coalesce. */
-    suspend fun colorFor(context: Context, packageName: String): Int? = withContext(Dispatchers.IO) {
-        mutex.withLock {
-            val pm = context.applicationContext.packageManager
-            try {
-                val info = pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
-                val old = cache[packageName]
-                if (old != null && old.version == info.longVersionCode && old.updated == info.lastUpdateTime) {
-                    return@withLock old.color
+    suspend fun colorFor(context: Context, packageName: String): Int? {
+        if (packageName.isBlank() || packageName == AppRule.ANY_APP) return null
+        return withContext(Dispatchers.IO) {
+            mutex.withLock {
+                val pm = context.applicationContext.packageManager
+                try {
+                    val info = pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+                    val old = cache[packageName]
+                    if (old != null && old.version == info.longVersionCode && old.updated == info.lastUpdateTime) {
+                        return@withLock old.color
+                    }
+                    val icon = pm.getApplicationIcon(packageName).mutate()
+                    val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
+                    val color = try {
+                        icon.setBounds(0, 0, bitmap.width, bitmap.height)
+                        icon.draw(Canvas(bitmap))
+                        val pixels = IntArray(bitmap.width * bitmap.height)
+                        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                        dominantIconColor(pixels)
+                    } finally {
+                        bitmap.recycle()
+                    }
+                    cache[packageName] = Entry(info.longVersionCode, info.lastUpdateTime, color)
+                    color
+                } catch (_: PackageManager.NameNotFoundException) {
+                    cache.remove(packageName)
+                    null
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: RuntimeException) {
+                    // An unavailable/broken drawable must never prevent an alert or editing a rule.
+                    cache.remove(packageName)
+                    null
                 }
-                val icon = pm.getApplicationIcon(packageName).mutate()
-                val bitmap = Bitmap.createBitmap(48, 48, Bitmap.Config.ARGB_8888)
-                val color = try {
-                    icon.setBounds(0, 0, bitmap.width, bitmap.height)
-                    icon.draw(Canvas(bitmap))
-                    val pixels = IntArray(bitmap.width * bitmap.height)
-                    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-                    dominantIconColor(pixels)
-                } finally {
-                    bitmap.recycle()
-                }
-                cache[packageName] = Entry(info.longVersionCode, info.lastUpdateTime, color)
-                color
-            } catch (_: PackageManager.NameNotFoundException) {
-                cache.remove(packageName)
-                null
-            } catch (_: RuntimeException) {
-                // An unavailable/broken drawable must never prevent an alert or editing a rule.
-                cache.remove(packageName)
-                null
             }
         }
     }

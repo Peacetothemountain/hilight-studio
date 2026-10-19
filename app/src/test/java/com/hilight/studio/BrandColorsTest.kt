@@ -18,4 +18,12 @@ class BrandColorsTest {
     fun `detectColor falls back to default green when app is unknown and context is null`() {
         assertEquals(BrandColors.DEFAULT_FALLBACK, BrandColors.detectColor(null, "com.unknown.app"))
     }
+
+    @Test
+    fun `detectColor returns DEFAULT_FALLBACK for ANY_APP and blank packages`() {
+        assertEquals(BrandColors.DEFAULT_FALLBACK, BrandColors.detectColor(null, AppRule.ANY_APP))
+        assertEquals(BrandColors.DEFAULT_FALLBACK, BrandColors.detectColor(null, ""))
+        assertEquals(BrandColors.DEFAULT_FALLBACK, BrandColors.detectColor(null, "   "))
+    }
 }
+

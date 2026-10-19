@@ -303,6 +303,28 @@ internal fun screenLifecycleAction(
     else -> ScreenLifecycleAction.REFRESH_ONLY
 }
 
+/** Preserves the flashlight alert across screen wake and user unlock lifecycle transitions. */
+internal fun shouldCancelAlertOnScreenLifecycle(
+    flashlightActive: Boolean,
+    activeAlertOwner: String?,
+): Boolean = !(flashlightActive && activeAlertOwner == Store.OWNER_FLASHLIGHT)
+
+/** Matches an active alert owner against a requested cancellation owner, including call-rule prefix owners. */
+internal fun matchesOwnedAlert(
+    activeOwner: String?,
+    requestedOwner: String,
+): Boolean = activeOwner != null && (
+    activeOwner == requestedOwner ||
+        (requestedOwner == DeviceSignals.OWNER_CALL && activeOwner.startsWith("call:"))
+    )
+
+/** Requires master toggle, legacy/UI gauge toggle, and both DeviceSignalSettings charging flags. */
+internal fun shouldTriggerChargingGauge(
+    masterEnabled: Boolean,
+    gaugeEnabled: Boolean,
+    settings: DeviceSignalSettings,
+): Boolean = masterEnabled && gaugeEnabled && settings.chargingEnabled && settings.chargingGauge
+
 /**
  * Single source of truth for the UI and the triggers, and the only thing that pushes to a [Backend].
  *
@@ -411,7 +433,9 @@ class Store private constructor(private val app: Context) {
 
     private val _flashlightBrightness = MutableStateFlow(prefs.getFloat("flashlightBrightness", 1f))
     val flashlightBrightness: StateFlow<Float> = _flashlightBrightness.asStateFlow()
-    private val _chargingGaugeEnabled = MutableStateFlow(prefs.getBoolean("chargingGaugeEnabled", true))
+    private val _chargingGaugeEnabled = MutableStateFlow(
+        prefs.getBoolean("signals.chargingGauge", prefs.getBoolean("chargingGaugeEnabled", false))
+    )
     val chargingGaugeEnabled: StateFlow<Boolean> = _chargingGaugeEnabled.asStateFlow()
 
     private val _presets = MutableStateFlow(loadPresets())
@@ -592,7 +616,7 @@ class Store private constructor(private val app: Context) {
                         ScreenLifecycleAction.CANCEL_AND_REFRESH -> {
                             // Unlocking means the notification has been seen. A screen wake alone
                             // cancels only a rule that explicitly requires the screen to stay off.
-                            if (!(_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT)) {
+                            if (shouldCancelAlertOnScreenLifecycle(_flashlightActive.value, activeAlertOwner)) {
                                 cancelAlert()
                             }
                             refreshSuppression()
@@ -783,7 +807,11 @@ class Store private constructor(private val app: Context) {
     fun setEnabled(v: Boolean) {
         _enabled.value = v
         prefs.edit().putBoolean("enabled", v).apply()
-        if (!v) cancelAlert()
+        if (!v) {
+            foregroundOverride = null
+            foregroundOverrideRule = null
+            cancelAlert()
+        }
         deviceSignals.setMasterEnabled(v)
         syncForegroundWatcher()
         if (v && root.state.value == RootBackend.State.AVAILABLE &&
@@ -804,6 +832,11 @@ class Store private constructor(private val app: Context) {
     /** Restores or stops the service to match saved rules and the master switch. */
     fun syncForegroundWatcher() {
         val plan = foregroundWatchPlan()
+        if (!plan.trackForegroundApps && (foregroundOverride != null || foregroundOverrideRule != null)) {
+            foregroundOverride = null
+            foregroundOverrideRule = null
+            if (_enabled.value) pushCurrent(arm = false)
+        }
         when (ForegroundWatcher.syncRunning(app, plan)) {
             ForegroundWatcher.SyncResult.STARTING_OR_RUNNING -> {
                 if (plan.trackFaceDown &&
@@ -1565,10 +1598,16 @@ class Store private constructor(private val app: Context) {
             main.post { cancelOwnedAlert(owner) }
             return
         }
-        if (activeAlertOwner == owner) cancelAlert()
+        if (matchesOwnedAlert(activeAlertOwner, owner)) {
+            cancelAlert()
+        }
     }
 
     internal fun showDeviceSignal(owner: String, look: Ambient, durationMs: Int): Boolean {
+        if (Looper.myLooper() != main.looper) {
+            main.post { showDeviceSignal(owner, look, durationMs) }
+            return false
+        }
         if (!_enabled.value || guardState().alertSuppression() != null) return false
         if (_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT) return false
         if (owner != DeviceSignals.OWNER_DND && _respectDnd.value && deviceSignals.shouldSuppressForDnd) return false
@@ -1720,7 +1759,7 @@ class Store private constructor(private val app: Context) {
 
     /** Triggers the 8-LED charging battery fuel gauge on the visor for 4 seconds. */
     fun triggerChargingGauge() {
-        if (!_enabled.value || !_chargingGaugeEnabled.value) return
+        if (!shouldTriggerChargingGauge(_enabled.value, _chargingGaugeEnabled.value, deviceSignals.settings.value)) return
         if (guardState().alertSuppression() != null) return
         if (_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT) return
         if (activeAlert != null && activeAlertOwner != DeviceSignals.OWNER_CHARGING) return
@@ -3385,7 +3424,7 @@ class Store private constructor(private val app: Context) {
 
     companion object {
         private const val TAG = "HiLightStore"
-        private const val OWNER_FLASHLIGHT = "flashlight"
+        internal const val OWNER_FLASHLIGHT = "flashlight"
 
         /** How many peeks the inspector keeps — enough to cover the last minute of a busy phone. */
         private const val MAX_PEEKS = 30

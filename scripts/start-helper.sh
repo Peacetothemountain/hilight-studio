@@ -8,7 +8,7 @@ set -euo pipefail
 PKG="com.hilight.studio"
 ADB="${ADB:-adb}"
 
-APK="$($ADB shell pm path $PKG | head -1 | tr -d '\r' | cut -d: -f2)"
+APK="$("$ADB" shell pm path "$PKG" | head -1 | tr -d '\r' | cut -d: -f2)"
 [ -n "$APK" ] || { echo "$PKG is not installed — run ./gradlew :app:installDebug first"; exit 1; }
 
 INSTANCE="adb-$("$ADB" shell cat /proc/sys/kernel/random/uuid | tr -d '\r\n')"
@@ -23,7 +23,7 @@ PHONE_RESET='live=1; i=0; while [ "$i" -lt 65 ] && [ -n "$live" ]; do live=""; f
 
 echo "renderer launched; synchronous startup cleanup can take about 2-3 seconds"
 sleep 4
-$ADB shell "tail -3 /data/local/tmp/hilight.log" || true
+"$ADB" shell "tail -3 /data/local/tmp/hilight.log" || true
 "$ADB" shell "pgrep -f 'com.hilight.core.AdbHelper.*--instance $INSTANCE'" >/dev/null \
   && echo "renderer running" \
   || { echo "failed to start; see /data/local/tmp/hilight.log"; exit 1; }

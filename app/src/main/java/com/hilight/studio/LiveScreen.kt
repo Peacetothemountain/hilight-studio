@@ -3,16 +3,15 @@ package com.hilight.studio
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,23 +26,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.Call
-import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Casino
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FlashOn
 import androidx.compose.material.icons.rounded.Flare
-import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Nightlight
-import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material3.Icon
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.rounded.Radar
-import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Waves
-import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,15 +48,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 
 /**
@@ -74,11 +65,18 @@ import kotlinx.coroutines.delay
  */
 @Composable
 private fun SafetyState(status: HelperStatus) {
-    var elapsedMs by remember(status.ambientRemainingMs, status.ambientHeld) { mutableLongStateOf(0L) }
-    LaunchedEffect(status.ambientRemainingMs, status.ambientHeld) {
-        while (true) {
-            delay(500)
-            elapsedMs += 500
+    var elapsedMs by remember(status.ambientRemainingMs, status.ambientHeld, status.resting) {
+        mutableLongStateOf(0L)
+    }
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(status.ambientRemainingMs, status.ambientHeld, status.resting, owner) {
+        if (!status.resting && !status.ambientHeld && status.ambientRemainingMs > 0L) {
+            owner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                while (elapsedMs < status.ambientRemainingMs) {
+                    delay(500)
+                    elapsedMs += 500
+                }
+            }
         }
     }
     val remaining = (status.ambientRemainingMs - elapsedMs).coerceAtLeast(0)
@@ -138,10 +136,11 @@ fun LiveScreen(store: Store) {
     PixelCard(tone = 0) {
         // while a test is running the hero shows the test, not the ambient look
         val shown = previewLook ?: ambient
+        val showing = enabled || previewLook != null
         DeviceHero(
-            pattern = if (enabled) shown.pattern else Pattern.OFF,
+            pattern = if (showing) shown.pattern else Pattern.OFF,
             cfg = shown,
-            active = enabled && status.alive,
+            active = showing && status.alive,
             profile = profile,
         )
         Row(
@@ -395,7 +394,15 @@ fun Android17FlashlightCard(
                         .size(32.dp)
                         .clip(CircleShape)
                         .background(currentColor)
-                        .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant,
+                            CircleShape,
+                        )
+                        .clickable(
+                            role = androidx.compose.ui.semantics.Role.Button,
+                            onClickLabel = stringResource(R.string.widget_colour),
+                        ) {
                             PixelHaptics.click(view)
                             showStudioDrawer = !showStudioDrawer
                         }

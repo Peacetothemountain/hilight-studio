@@ -80,7 +80,7 @@ class ForegroundWatcher : Service() {
                 // Store is a main-thread object: every other caller mutates it from there, and its
                 // override field and file writes are not synchronized.
                 main.post {
-                    if (!stopped) {
+                    if (!stopped && plan.trackForegroundApps) {
                         val rule = pkg?.let { store.ruleFor(it, Trigger.FOREGROUND) }
                         store.setForegroundOverride(pkg?.takeIf { rule != null }, rule)
                     }
@@ -106,7 +106,7 @@ class ForegroundWatcher : Service() {
             // Sensor callbacks can already be queued while the service is tearing down. Mirror the
             // foreground-app path's stopped guard so a retired watcher cannot publish late state.
             main.post {
-                if (!stopped) store.updateFaceDownSensorState(state, sampleElapsedMs)
+                if (!stopped && plan.trackFaceDown) store.updateFaceDownSensorState(state, sampleElapsedMs)
             }
         }
         startForeground(NOTIFICATION_ID, notification(plan))
@@ -120,8 +120,9 @@ class ForegroundWatcher : Service() {
         handler.removeCallbacksAndMessages(null)
         thread.quitSafely()
         main.post {
-            store.setForegroundOverride(null, null)
-            store.updateFaceDownSensorState(FaceDownState.INACTIVE, 0L)
+            val currentPlan = store.foregroundWatchPlan()
+            if (!currentPlan.trackForegroundApps) store.setForegroundOverride(null, null)
+            if (!currentPlan.trackFaceDown) store.updateFaceDownSensorState(FaceDownState.INACTIVE, 0L)
         }
         super.onDestroy()
     }
@@ -150,7 +151,7 @@ class ForegroundWatcher : Service() {
             foreground.clear()
             lastPkg = null
             queriedThroughMs = Long.MIN_VALUE
-            main.post { if (!stopped) store.setForegroundOverride(null, null) }
+            main.post { if (!stopped && !plan.trackForegroundApps) store.setForegroundOverride(null, null) }
         }
 
         if (prior.trackFaceDown != next.trackFaceDown) {
@@ -164,7 +165,7 @@ class ForegroundWatcher : Service() {
                 } else {
                     faceDownTracker.stop()
                     main.post {
-                        if (!stopped) {
+                        if (!stopped && !plan.trackFaceDown) {
                             store.updateFaceDownSensorState(FaceDownState.INACTIVE, 0L)
                         }
                     }

@@ -13,11 +13,13 @@ else
   API_JAR="$(find "$SDK/platforms" -maxdepth 2 -path '*/android-37*/android.jar' -print \
     | sort -V | tail -1)"
 fi
-BT="$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)"
+BT="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | sort -V | tail -1)"
 JAVAC="${JAVAC:-$(command -v javac || echo "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/javac")}"
 
 [ -n "$API_JAR" ] && [ -f "$API_JAR" ] \
   || { echo "missing an Android 17 / API 37 android.jar"; exit 1; }
+[ -n "$BT" ] && [ -x "$BT/d8" ] \
+  || { echo "missing Android SDK build-tools d8"; exit 1; }
 case "$API_JAR" in
   */platforms/android-37*/android.jar) ;;
   *) [ -n "${HILIGHT_API_JAR:-}" ] \
@@ -31,8 +33,8 @@ rm -rf "$OUT" && mkdir -p "$OUT/classes"
 "$JAVAC" --release 17 -nowarn -classpath "$API_JAR" -d "$OUT/classes" \
   "$ROOT"/core/src/com/hilight/core/*.java
 
-"$BT/d8" --lib "$API_JAR" --output "$OUT" "$OUT"/classes/com/hilight/core/*.class 2>&1 \
-  | grep -v "API level" || true
+D8_OUT="$("$BT/d8" --lib "$API_JAR" --output "$OUT" "$OUT"/classes/com/hilight/core/*.class 2>&1)"
+printf '%s\n' "$D8_OUT" | grep -v "API level" || true
 
 mv "$OUT/classes.dex" "$OUT/hilight-helper.dex"
 echo "built $OUT/hilight-helper.dex"

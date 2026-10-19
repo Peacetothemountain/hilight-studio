@@ -86,8 +86,20 @@ class NotificationTrigger : NotificationListenerService() {
     }
 
     override fun onInterruptionFilterChanged(interruptionFilter: Int) {
-        store.deviceSignals.onInterruptionFilterChanged(interruptionFilter)
-        reconcileSignals()
+        onMainImmediate {
+            store.deviceSignals.onInterruptionFilterChanged(interruptionFilter)
+            reconcileSignals()
+        }
+    }
+
+    private inline fun onMainImmediate(crossinline block: () -> Unit) {
+        if (Looper.myLooper() == main.looper) {
+            block()
+        } else {
+            main.post {
+                runCatching { block() }.onFailure { Log.w(TAG, "notification signal update failed", it) }
+            }
+        }
     }
 
     /**
@@ -143,17 +155,21 @@ class NotificationTrigger : NotificationListenerService() {
         }
 
         val rule = store.ruleForMessage(info) ?: run {
-            reminders.remove(sbn.key)
+            onMainImmediate { reminders.remove(sbn.key) }
             return
         }
         if (rule.keyword.isNotBlank() && !matchesKeyword(info, rule.keyword)) {
-            reminders.remove(sbn.key)
+            onMainImmediate { reminders.remove(sbn.key) }
             return
         }
-        if (rule.repeatWhilePending && store.enabled.value && locked()) {
-            reminders.posted(sbn.key, rule.id, sbn.postTime, SystemClock.elapsedRealtime(), rule.safeRepeatIntervalMs)
-            scheduleTick()
-        } else reminders.remove(sbn.key)
+        val postTime = sbn.postTime
+        val key = sbn.key
+        onMainImmediate {
+            if (rule.repeatWhilePending && store.enabled.value && locked()) {
+                reminders.posted(key, rule.id, postTime, SystemClock.elapsedRealtime(), rule.safeRepeatIntervalMs)
+                scheduleTick()
+            } else reminders.remove(key)
+        }
 
         // These two guards silence the flash, but the rule did match, and the rules screen shows
         // exactly that: "last matched". Returning before recording it would leave a working rule
@@ -200,12 +216,14 @@ class NotificationTrigger : NotificationListenerService() {
         runCatching {
             val key = runCatching { sbn.key }.getOrNull().orEmpty()
             if (key.isNotEmpty()) synchronized(handled) { handled.remove(key) }
-            reminders.remove(sbn.key)
-            incomingCalls.remove(sbn.key)
-            store.cancelOwnedAlert("notification:${sbn.key}")
-            store.cancelOwnedAlert("reminder:${sbn.key}")
-            store.cancelOwnedAlert("call:${sbn.key}")
-            reconcileSignals()
+            onMainImmediate {
+                reminders.remove(key)
+                incomingCalls.remove(key)
+                store.cancelOwnedAlert("notification:$key")
+                store.cancelOwnedAlert("reminder:$key")
+                store.cancelOwnedAlert("call:$key")
+                reconcileSignals()
+            }
         }.onFailure { Log.w(TAG, "could not handle removal", it) }
     }
 
@@ -231,8 +249,8 @@ class NotificationTrigger : NotificationListenerService() {
 
     private fun readMessage(sbn: StatusBarNotification): MessageInfo {
         val ranking = Ranking()
-        val ranked = currentRanking.getRanking(sbn.key, ranking)
-        val channel = if (ranked) ranking.channel else null
+        val ranked = runCatching { currentRanking?.getRanking(sbn.key, ranking) == true }.getOrDefault(false)
+        val channel = if (ranked) runCatching { ranking.channel }.getOrNull() else null
         val silent = if (ranked) {
             isSilentNotification(ranking.importance, channel == null || channel.sound != null, channel?.shouldVibrate() == true)
         } else false
@@ -266,10 +284,16 @@ class NotificationTrigger : NotificationListenerService() {
             setOf("fg_watch", SHIZUKU_RECOVERY_CHANNEL)
 
     private fun updateIncomingCall(sbn: StatusBarNotification) {
-        if (store.deviceSignals.settings.value.callsEnabled && incoming(sbn)) {
-            incomingCalls.add(sbn.key)
-        } else if (incomingCalls.remove(sbn.key)) store.cancelOwnedAlert("call:${sbn.key}")
-        if (incomingCalls.isNotEmpty()) scheduleTick(immediate = true)
+        val isCall = store.deviceSignals.settings.value.callsEnabled && incoming(sbn)
+        val key = sbn.key
+        onMainImmediate {
+            if (isCall) {
+                incomingCalls.add(key)
+            } else if (incomingCalls.remove(key)) {
+                store.cancelOwnedAlert("call:$key")
+            }
+            if (incomingCalls.isNotEmpty()) scheduleTick(immediate = true)
+        }
     }
 
     private val tick = Runnable { reconcileSignals() }
@@ -325,8 +349,8 @@ class NotificationTrigger : NotificationListenerService() {
             reminderOwner?.let(store::cancelOwnedAlert)
             reminderOwner = null
         }
-        val next = reminders.latest()
-        if (next != null) {
+        while (true) {
+            val next = reminders.latest() ?: break
             val sbn = byKey[next.key]
             val info = sbn?.let { runCatching { readMessage(it) }.getOrNull() }
             val rule = info?.let(store::ruleForMessage)
@@ -334,7 +358,10 @@ class NotificationTrigger : NotificationListenerService() {
                 (rule.keyword.isNotBlank() && !matchesKeyword(info, rule.keyword))) {
                 reminders.remove(next.key)
                 store.cancelOwnedAlert("reminder:${next.key}")
-            } else if (SystemClock.elapsedRealtime() >= next.dueAtMs) {
+                if (reminderOwner == "reminder:${next.key}") reminderOwner = null
+                continue
+            }
+            if (SystemClock.elapsedRealtime() >= next.dueAtMs) {
                 val nowElapsed = SystemClock.elapsedRealtime()
                 if (!store.hasActiveAlert()) {
                     reminderOwner = "reminder:${next.key}"
@@ -342,6 +369,7 @@ class NotificationTrigger : NotificationListenerService() {
                 }
                 reminders.defer(next.key, nowElapsed, rule.safeRepeatIntervalMs)
             }
+            break
         }
         scheduleTick()
     }
@@ -358,7 +386,7 @@ class NotificationTrigger : NotificationListenerService() {
                         ConversationMatch.isHealOf(it, savedRule)
                 } ||
                 runCatching { activeNotifications?.none { it.key == notificationKey } }.getOrNull() != false ||
-                (owner.startsWith("reminder:") && !locked())) return@launch
+                (owner.startsWith("reminder:") && (!locked() || store.hasActiveAlert()))) return@launch
             store.fireAlert(rule.copy(color = color), owner)
         }
     }

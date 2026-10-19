@@ -317,6 +317,69 @@ class StoreLifecycleRecoveryTest {
         assertFalse(rendererConnectedForUi(ready, true))
     }
 
+    @Test
+    fun `matchesOwnedAlert matches exact owner and call rule prefix without cancelling unrelated owners`() {
+        assertTrue(matchesOwnedAlert(DeviceSignals.OWNER_CALL, DeviceSignals.OWNER_CALL))
+        assertTrue(matchesOwnedAlert("call:0|com.google.android.dialer|1|null|10123", DeviceSignals.OWNER_CALL))
+        assertTrue(matchesOwnedAlert("reminder:0|pkg|1|tag|1000", "reminder:0|pkg|1|tag|1000"))
+
+        assertFalse(matchesOwnedAlert(null, DeviceSignals.OWNER_CALL))
+        assertFalse(matchesOwnedAlert(Store.OWNER_FLASHLIGHT, DeviceSignals.OWNER_CALL))
+        assertFalse(matchesOwnedAlert("reminder:0|pkg|1|tag|1000", DeviceSignals.OWNER_CALL))
+        assertFalse(matchesOwnedAlert("call:0|com.google.android.dialer|1|null|10123", DeviceSignals.OWNER_DND))
+    }
+
+    @Test
+    fun `shouldTriggerChargingGauge requires master toggle gauge toggle and both charging signal flags`() {
+        val allOn = DeviceSignalSettings(chargingEnabled = true, chargingGauge = true)
+        assertTrue(shouldTriggerChargingGauge(masterEnabled = true, gaugeEnabled = true, settings = allOn))
+
+        assertFalse(shouldTriggerChargingGauge(masterEnabled = false, gaugeEnabled = true, settings = allOn))
+        assertFalse(shouldTriggerChargingGauge(masterEnabled = true, gaugeEnabled = false, settings = allOn))
+        assertFalse(
+            shouldTriggerChargingGauge(
+                masterEnabled = true,
+                gaugeEnabled = true,
+                settings = allOn.copy(chargingEnabled = false),
+            )
+        )
+        assertFalse(
+            shouldTriggerChargingGauge(
+                masterEnabled = true,
+                gaugeEnabled = true,
+                settings = allOn.copy(chargingGauge = false),
+            )
+        )
+    }
+
+    @Test
+    fun `shouldCancelAlertOnScreenLifecycle preserves active flashlight across unlock and screen wake`() {
+        assertFalse(
+            shouldCancelAlertOnScreenLifecycle(
+                flashlightActive = true,
+                activeAlertOwner = Store.OWNER_FLASHLIGHT,
+            )
+        )
+        assertTrue(
+            shouldCancelAlertOnScreenLifecycle(
+                flashlightActive = false,
+                activeAlertOwner = Store.OWNER_FLASHLIGHT,
+            )
+        )
+        assertTrue(
+            shouldCancelAlertOnScreenLifecycle(
+                flashlightActive = true,
+                activeAlertOwner = "reminder:0|pkg|1|tag|1000",
+            )
+        )
+        assertTrue(
+            shouldCancelAlertOnScreenLifecycle(
+                flashlightActive = false,
+                activeAlertOwner = null,
+            )
+        )
+    }
+
     private fun currentStatus(
         alive: Boolean = true,
         identityResolved: Boolean = true,

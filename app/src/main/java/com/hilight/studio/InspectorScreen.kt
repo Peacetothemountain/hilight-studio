@@ -131,7 +131,7 @@ private fun PeekCard(peek: MessageInfo) {
             Text(
                 peek.pkg,
                 style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.fillMaxWidth(0.58f),
+                modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp),
             )
             // The distinction that decides whether a rule is even writable, so it is the one thing
             // readable at a glance. A failed read gets its own state rather than being folded into
@@ -244,5 +244,5 @@ private fun shareJson(ctx: Context, text: String) {
         putExtra(Intent.EXTRA_TEXT, text)
     }
     val title = ctx.getString(R.string.inspector_share_chooser_title)
-    ctx.startActivity(Intent.createChooser(send, title))
+    runCatching { ctx.startActivity(Intent.createChooser(send, title)) }
 }

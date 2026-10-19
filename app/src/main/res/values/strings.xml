@@ -4,4 +4,14 @@
          stops asking for a Japanese rendering of it, and so no future translator supplies one. -->
     <string name="app_name" translatable="false">HiLight Studio</string>
     <string name="setup_root_disconnected_body">Root is available, but the light renderer is not connected. Retry root, then copy LED diagnostics if it stays disconnected.</string>
+    <string name="rules_quick_setup">Quick Setup</string>
+    <string name="setup_qs_tile_title">Quick Settings Tile</string>
+    <string name="setup_qs_tile_body">Add the HiLight tile to your Quick Settings panel to quickly toggle ambient lighting, flashlight, or stock effects from anywhere.</string>
+    <string name="setup_qs_tile_button">Add HiLight Tile to Quick Settings</string>
+    <string name="setup_qs_tile_added">Tile added to Quick Settings!</string>
+    <string name="setup_qs_tile_already_added">Tile is already in Quick Settings.</string>
+    <string name="setup_qs_tile_opened">Quick Settings request opened.</string>
+    <string name="setup_wireless_adb_title">Wireless Debugging &amp; On-Device Setup</string>
+    <string name="setup_wireless_adb_body">Run HiLight completely wire-free using Android 11+ Wireless Debugging without connecting to a computer.</string>
+    <string name="setup_wireless_adb_button">Open Developer Options</string>
 </resources>

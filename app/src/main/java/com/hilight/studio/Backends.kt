@@ -178,7 +178,8 @@ internal fun safeAdbPush(json: String, status: HelperStatus): AdbPushDecision {
     val parsed = runCatching { JSONObject(json) }.getOrNull()
     val explicitlyDisabled = parsed?.has("enabled") == true &&
         !parsed.optBoolean("enabled", true) &&
-        !parsed.optBoolean("privacyOutputEnabled", false)
+        !parsed.optBoolean("privacyOutputEnabled", false) &&
+        (!parsed.has("alert") || parsed.isNull("alert"))
     if (explicitlyDisabled) {
         // Deliberately unscoped: every legacy/duplicate bridge renderer must stand down.
         parsed.remove("bridgeRendererInstanceId")
@@ -262,17 +263,17 @@ class ShizukuBackend(private val ctx: Context) : Backend {
     private var rebindAfterCompatibilityDisconnect = false
 
     /** A create-capable bind is issued at most once, and only after a no-create peek proved absent. */
-    private var connectionAttemptActive = false
+    @Volatile private var connectionAttemptActive = false
     private var peekAwaitingCallback = false
     private var peekRetryAttempted = false
     private var peekReportedExisting = false
     private var createBindIssued = false
 
     /** An explicit disconnect request wins over every late peek/create callback. */
-    private var startupRemovalPending = false
+    @Volatile private var startupRemovalPending = false
 
     /** Reject callbacks from a removed connection epoch until a new bind intent starts a peek. */
-    private var connectionRemovalTombstone = false
+    @Volatile private var connectionRemovalTombstone = false
 
     /** Normal unbind/manager-death cleanup also waits for exact service-binder death. */
     private var normalExitPending = false
@@ -306,7 +307,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
     val unresolvedIncompatibleRenderer: StateFlow<Boolean> =
         _unresolvedIncompatibleRenderer.asStateFlow()
 
-    private var releaseTerminationBinder: IBinder? = null
+    @Volatile private var releaseTerminationBinder: IBinder? = null
     private var releaseTerminationCallback: ((Boolean) -> Unit)? = null
     private val releaseTerminationWaiters = ArrayList<(Boolean) -> Unit>()
     private val releaseTerminationTimeout = Runnable {
@@ -1363,13 +1364,13 @@ class ShizukuBackend(private val ctx: Context) : Backend {
         val o = if (s === service) {
             val previous = lastCompleteStatus.takeIf { lastCompleteStatusBinder == binder }
             val retained = retainedShizukuStatus(liveStatus, previous)
-            if (liveStatus != null && retained === liveStatus) {
+            if (liveStatus != null && retained === liveStatus && service === s) {
                 lastCompleteStatusBinder = binder
                 lastCompleteStatus = liveStatus
             }
             retained
         } else if (liveStatus != null && isCompleteShizukuRendererStatus(liveStatus)) {
-            incompatibleStatus = liveStatus
+            if (incompatibleService === s) incompatibleStatus = liveStatus
             liveStatus
         } else {
             incompatibleStatus ?: liveStatus

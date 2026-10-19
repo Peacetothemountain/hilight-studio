@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -34,6 +35,14 @@ class HiLightTile : TileService() {
     override fun onStopListening() {
         super.onStopListening()
         listeningJob?.cancel()
+        listeningJob = null
+    }
+
+    override fun onDestroy() {
+        listeningJob?.cancel()
+        listeningJob = null
+        scope.cancel()
+        super.onDestroy()
     }
 
     override fun onClick() {

@@ -28,12 +28,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
@@ -58,61 +60,70 @@ fun PrivacyRulesSection(
     }
 
     rules.forEach { rule ->
-        PixelCard {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+        key(rule.id) {
+            PixelCard {
                 Row(
-                    Modifier.weight(1f),
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Box(Modifier.size(14.dp).background(Color(rule.color), CircleShape))
-                    Column {
-                        Text(
-                            if (rule.activity == PrivacyActivity.MICROPHONE)
-                                stringResource(R.string.privacy_microphone_active)
-                            else stringResource(R.string.privacy_camera_active),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Caption(
-                            if (rule.isCatchAll) stringResource(R.string.rules_any_app)
-                            else rule.appLabel.ifBlank { rule.pkg }
-                        )
-                        Caption(
-                            stringResource(
-                                R.string.privacy_card_summary,
-                                formatDuration(rule.lightMs),
-                                formatDuration(rule.cooldownMs),
+                    Row(
+                        Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(Modifier.size(14.dp).background(Color(rule.color), CircleShape))
+                        Column {
+                            Text(
+                                if (rule.activity == PrivacyActivity.MICROPHONE)
+                                    stringResource(R.string.privacy_microphone_active)
+                                else stringResource(R.string.privacy_camera_active),
+                                style = MaterialTheme.typography.titleMedium,
                             )
-                        )
+                            Caption(
+                                if (rule.isCatchAll) stringResource(R.string.rules_any_app)
+                                else rule.appLabel.ifBlank { rule.pkg }
+                            )
+                            Caption(
+                                stringResource(
+                                    R.string.privacy_card_summary,
+                                    formatDuration(rule.lightMs),
+                                    formatDuration(rule.cooldownMs),
+                                )
+                            )
+                        }
                     }
+                    val view = LocalView.current
+                    Switch(
+                        checked = rule.enabled,
+                        onCheckedChange = {
+                            PixelHaptics.toggle(view, it)
+                            onToggle(rule)
+                        },
+                    )
                 }
-                Switch(checked = rule.enabled, onCheckedChange = { onToggle(rule) })
-            }
-            LedStrip(
-                rule.pattern,
-                Ambient(
-                    pattern = rule.pattern,
-                    color = rule.color,
-                    secondColor = rule.secondColor,
-                    speedMs = rule.speedMs,
-                    brightness = rule.brightness,
-                ),
-                active = rule.enabled,
-                heightDp = 34,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FilledTonalButton(onClick = { onEdit(rule) }, modifier = Modifier.weight(1f)) {
-                    ButtonLabel(stringResource(R.string.common_edit))
-                }
-                FilledTonalButton(onClick = { onTest(rule) }, modifier = Modifier.weight(1f)) {
-                    ButtonLabel(stringResource(R.string.common_test))
-                }
-                TextButton(onClick = { onDelete(rule) }, modifier = Modifier.weight(1f)) {
-                    ButtonLabel(stringResource(R.string.common_delete))
+                LedStrip(
+                    rule.pattern,
+                    Ambient(
+                        pattern = rule.pattern,
+                        color = rule.color,
+                        secondColor = rule.secondColor,
+                        speedMs = rule.speedMs,
+                        brightness = rule.brightness,
+                    ),
+                    active = rule.enabled,
+                    heightDp = 34,
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FilledTonalButton(onClick = { onEdit(rule) }, modifier = Modifier.weight(1f)) {
+                        ButtonLabel(stringResource(R.string.common_edit))
+                    }
+                    FilledTonalButton(onClick = { onTest(rule) }, modifier = Modifier.weight(1f)) {
+                        ButtonLabel(stringResource(R.string.common_test))
+                    }
+                    TextButton(onClick = { onDelete(rule) }, modifier = Modifier.weight(1f)) {
+                        ButtonLabel(stringResource(R.string.common_delete))
+                    }
                 }
             }
         }
@@ -200,6 +211,18 @@ fun PrivacyRuleEditorDialog(
                 Modifier.heightIn(max = 540.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                LedStrip(
+                    edited.pattern,
+                    Ambient(
+                        pattern = edited.pattern,
+                        color = edited.color,
+                        secondColor = edited.secondColor,
+                        speedMs = edited.speedMs,
+                        brightness = edited.brightness,
+                    ),
+                    active = edited.enabled,
+                    heightDp = 38,
+                )
                 val microphone = stringResource(R.string.privacy_microphone)
                 val camera = stringResource(R.string.privacy_camera)
                 SegmentedSelector(
@@ -207,8 +230,15 @@ fun PrivacyRuleEditorDialog(
                     selected = edited.activity,
                     label = { if (it == PrivacyActivity.MICROPHONE) microphone else camera },
                     onSelect = { activity ->
-                        val defaultColor = PrivacyRule.default(activity).color
-                        edited = edited.copy(activity = activity, color = defaultColor)
+                        if (activity != edited.activity) {
+                            val oldDefault = PrivacyRule.default(edited.activity).color
+                            val nextColor = if (edited.color == oldDefault) {
+                                PrivacyRule.default(activity).color
+                            } else {
+                                edited.color
+                            }
+                            edited = edited.copy(activity = activity, color = nextColor)
+                        }
                     },
                 )
                 Caption(stringResource(R.string.privacy_observation_note))

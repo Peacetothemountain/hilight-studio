@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -58,11 +59,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
@@ -311,7 +309,7 @@ fun PixelTile(
     )
     Row(
         modifier
-            .pressSquash(pressed, min = 0.94f)
+            .pressSquash(pressed && enabled, min = 0.94f)
             .clip(tileShape)
             .background(container, tileShape)
             .border(
@@ -320,6 +318,7 @@ fun PixelTile(
                 tileShape,
             )
             .clickable(
+                enabled = enabled,
                 interactionSource = interaction,
                 indication = ripple(),
                 role = Role.Button,
@@ -367,15 +366,16 @@ fun PixelToggleRow(
             .fillMaxWidth()
             .pressSquash(pressed, min = 0.98f)
             .clip(MaterialTheme.shapes.medium)
-            .clickable(
+            .toggleable(
+                value = checked,
                 interactionSource = interaction,
                 indication = ripple(),
                 role = Role.Switch,
-            ) {
-                val next = !checked
-                PixelHaptics.toggle(view, next)
-                onChange(next)
-            }
+                onValueChange = { next ->
+                    PixelHaptics.toggle(view, next)
+                    onChange(next)
+                },
+            )
             .padding(vertical = 12.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -408,18 +408,19 @@ fun ToggleRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .pressSquash(pressed, min = 0.98f)
+            .pressSquash(pressed && enabled, min = 0.98f)
             .clip(MaterialTheme.shapes.small)
-            .clickable(
+            .toggleable(
+                value = checked,
                 enabled = enabled,
                 interactionSource = interaction,
                 indication = ripple(),
                 role = Role.Switch,
-            ) {
-                val next = !checked
-                PixelHaptics.toggle(view, next)
-                onChange(next)
-            }
+                onValueChange = { next ->
+                    PixelHaptics.toggle(view, next)
+                    onChange(next)
+                },
+            )
             .padding(vertical = 10.dp, horizontal = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -434,10 +435,7 @@ fun ToggleRow(
         Switch(
             checked = checked,
             enabled = enabled,
-            onCheckedChange = {
-                PixelHaptics.toggle(view, it)
-                onChange(it)
-            },
+            onCheckedChange = null,
             modifier = Modifier.scale(0.9f)
         )
     }
@@ -694,6 +692,7 @@ fun GatedDurationSlider(
 ) {
     var unlocked by remember { mutableStateOf(valueMs > safeMaxMs) }
     var asking by remember { mutableStateOf(false) }
+    val effectiveUnlocked = unlocked || valueMs > safeMaxMs
 
     // Loading a saved long duration must expose its full range, but moving back below the warning
     // threshold must not revoke consent or collapse the slider in the middle of a drag.
@@ -704,12 +703,12 @@ fun GatedDurationSlider(
     PixelSlider(
         label = label,
         value = valueMs.toFloat(),
-        range = minMs.toFloat()..(if (unlocked) extendedMaxMs else safeMaxMs).toFloat(),
+        range = minMs.toFloat()..(if (effectiveUnlocked) extendedMaxMs else safeMaxMs).toFloat(),
         onChange = { onChange(it.toInt()) },
         typeInSeconds = true,
     ) { formatDuration(it.toInt()) }
 
-    ToggleRow(unlockLabel, unlocked) { wanted ->
+    ToggleRow(unlockLabel, effectiveUnlocked) { wanted ->
         if (wanted) {
             asking = true
         } else {
@@ -756,10 +755,11 @@ fun formatDuration(ms: Int): String = when {
 fun HiLightAppIcon(
     modifier: Modifier = Modifier,
     size: Int = 32,
+    contentDescription: String? = null,
 ) {
     Icon(
         painter = androidx.compose.ui.res.painterResource(R.drawable.ic_hilight_foreground),
-        contentDescription = "HiLight Studio Icon",
+        contentDescription = contentDescription,
         modifier = modifier.size(size.dp),
         tint = Color.Unspecified
     )

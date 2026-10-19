@@ -88,16 +88,15 @@ AAPT2="$(find "$SDK/build-tools" -maxdepth 2 -type f -name aapt2 -print \
 [ -x "$APKSIGNER" ] || { echo "missing apksigner" >&2; exit 1; }
 [ -x "$AAPT2" ] || { echo "missing aapt2" >&2; exit 1; }
 
-CERT="$($APKSIGNER verify --print-certs "$APK" \
-  | awk -F': ' '/Signer #1 certificate SHA-256 digest:/{print tolower($2); exit}')"
+CERT="$("$APKSIGNER" verify --print-certs "$APK" \
+  | awk -F': ' '/Signer #1 certificate SHA-256 digest:/{ if (!found) { print tolower($2); found=1 } }')"
 [ "$CERT" = "$EXPECTED_CERT" ] || {
   echo "release certificate mismatch; refusing artifact" >&2
   exit 1
 }
 
-VERSION="$($AAPT2 dump badging "$APK" \
-  | sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p" \
-  | head -1)"
+VERSION="$("$AAPT2" dump badging "$APK" \
+  | awk -F"'" '/^package:.*versionName=/{ if (!found) { print $6; found=1 } }')"
 [ -n "$VERSION" ] || { echo "could not read APK version" >&2; exit 1; }
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"

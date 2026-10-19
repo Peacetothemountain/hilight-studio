@@ -253,15 +253,20 @@ public final class LightsBackend {
         };
 
         @SuppressWarnings("unchecked")
-        List<Light> all = (List<Light>) getLights.invoke(service);
+        List<Light> rawLights = (List<Light>) getLights.invoke(service);
+        List<Light> all = rawLights != null ? rawLights : java.util.Collections.emptyList();
         int n = 0;
-        for (Light l : all) if (l.getType() == Light.LIGHT_TYPE_APPLICATION) n++;
+        for (Light l : all) if (l != null && l.getType() == Light.LIGHT_TYPE_APPLICATION) n++;
         ids = new int[n];
         int k = 0;
         for (Light l : all) {
-            if (l.getType() != Light.LIGHT_TYPE_APPLICATION) continue;
+            if (l == null || l.getType() != Light.LIGHT_TYPE_APPLICATION) continue;
             ids[k++] = l.getId();
-            minUpdatePeriodMs = Math.max(minUpdatePeriodMs, l.getMinUpdatePeriodMillis());
+            try {
+                minUpdatePeriodMs = Math.max(minUpdatePeriodMs, l.getMinUpdatePeriodMillis());
+            } catch (Throwable ignored) {
+                // Keep default FRAME_MS when the platform Light implementation omits period metadata.
+            }
         }
         describe(all);
     }
@@ -276,7 +281,7 @@ public final class LightsBackend {
      */
     private void describe(List<Light> all) {
         for (Light l : all) {
-            if (l.getType() != Light.LIGHT_TYPE_APPLICATION) continue;
+            if (l == null || l.getType() != Light.LIGHT_TYPE_APPLICATION) continue;
             String period;
             try {
                 period = l.getMinUpdatePeriodMillis() + "ms";

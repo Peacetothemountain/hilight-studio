@@ -1,5 +1,6 @@
 package com.hilight.studio
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -143,26 +144,32 @@ fun knownConversation(rule: AppRule, known: List<ConversationRef>): Conversation
  * inflects the unit where Japanese does not, and no amount of concatenation gets both right. Both
  * call sites are already composables, so this costs them nothing.
  *
- * The counts are worked out before the branch that uses them, which is safe because each is only
- * read where the branch above it has already bounded it — and a missing stamp is caught first, so
- * the nonsense difference it would produce is never measured.
+ * The counts are worked out inside the branch that uses them, where the branch above has already
+ * bounded `diff` — and a missing stamp is caught first, so the nonsense difference it would produce
+ * is never measured.
  */
 @Composable
 fun relativeAgo(stampMs: Long, nowMs: Long = System.currentTimeMillis()): String {
+    if (stampMs <= 0L) return stringResource(R.string.chat_ago_unknown)
     val diff = nowMs - stampMs
-    val minutes = (diff / 60_000L).toInt()
-    val hours = (diff / 3_600_000L).toInt()
-    val days = (diff / 86_400_000L).toInt()
     return when {
-        stampMs <= 0L -> stringResource(R.string.chat_ago_unknown)
         // also covers a clock that has moved backwards
         diff < 60_000L -> stringResource(R.string.chat_ago_just_now)
-        diff < 3_600_000L -> pluralStringResource(R.plurals.chat_ago_minutes, minutes, minutes)
-        hours < 24 -> pluralStringResource(R.plurals.chat_ago_hours, hours, hours)
+        diff < 3_600_000L -> {
+            val minutes = (diff / 60_000L).toInt()
+            pluralStringResource(R.plurals.chat_ago_minutes, minutes, minutes)
+        }
+        diff < 86_400_000L -> {
+            val hours = (diff / 3_600_000L).toInt()
+            pluralStringResource(R.plurals.chat_ago_hours, hours, hours)
+        }
         // One day is a word rather than a count, and not every language can express that as the
         // "one" form of a plural, so it stays a branch here and a string of its own.
-        days == 1 -> stringResource(R.string.chat_ago_yesterday)
-        days < 7 -> pluralStringResource(R.plurals.chat_ago_days, days, days)
+        diff < 2 * 86_400_000L -> stringResource(R.string.chat_ago_yesterday)
+        diff < 7 * 86_400_000L -> {
+            val days = (diff / 86_400_000L).toInt()
+            pluralStringResource(R.plurals.chat_ago_days, days, days)
+        }
         else -> stringResource(R.string.chat_ago_over_a_week)
     }
 }
@@ -312,6 +319,8 @@ fun ConversationPickerDialog(
     // access can be withdrawn while this dialog sits open, and clearing the capture card on a refused
     // arm is what lets the warning below be seen at all.
     val armLearning: () -> Unit = {
+        contactFailed = false
+        unusable = false
         notifAccess = hasListenerAccess(ctx)
         if (notifAccess) {
             store.startLearning(pkg)
@@ -427,6 +436,7 @@ fun ConversationPickerDialog(
                                         ref = lastCaptured,
                                         onUse = {
                                             val ref = lastCaptured
+                                            wasCapture = false
                                             store.clearLearned()
                                             if (ref != null) accept(ref)
                                         },
@@ -438,9 +448,11 @@ fun ConversationPickerDialog(
                                 } else if (!notifAccess) {
                                     NoAccessBlock(
                                         onOpenSettings = {
-                                            ctx.startActivity(
-                                                Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                                            )
+                                            runCatching {
+                                                ctx.startActivity(
+                                                    Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                                )
+                                            }
                                         },
                                         // An armed wait is left armed on purpose. It costs nothing
                                         // while access is missing, and granting access makes it work
@@ -634,7 +646,9 @@ private fun ConversationRow(ref: ConversationRef, onPick: () -> Unit) {
 private fun hasListenerAccess(ctx: Context): Boolean {
     val flat = Settings.Secure.getString(ctx.contentResolver, "enabled_notification_listeners")
         ?: return false
-    return flat.contains(ctx.packageName)
+    return flat.split(':').any {
+        ComponentName.unflattenFromString(it)?.packageName == ctx.packageName
+    }
 }
 
 /**

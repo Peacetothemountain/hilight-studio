@@ -149,8 +149,50 @@ class RuleDraftsTest {
         assertNotEquals(source.id, copied.id)
     }
 
+    @Test fun `copying catch all rule to specific app clears excludedPackages`() {
+        val source = rule(pkg = AppRule.ANY_APP).copy(excludedPackages = setOf("com.excluded"))
+        val copiedToSpecific = copyWholeAppRule(source, "com.target", "Target")
+        val copiedToCatchAll = copyWholeAppRule(source, AppRule.ANY_APP, "Any app")
+
+        assertTrue(copiedToSpecific.excludedPackages.isEmpty())
+        assertEquals(setOf("com.excluded"), copiedToCatchAll.excludedPackages)
+    }
+
+    @Test fun `replacesExistingRule ignores background heal of openedRule`() {
+        val opened = rule().copy(conversationName = "Sujay")
+        val healed = opened.copy(conversationKey = "chat-42", conversationIsGroup = true)
+
+        assertFalse(
+            replacesExistingRule(
+                existing = listOf(healed),
+                candidate = opened.copy(color = 0xFF00FF00.toInt()),
+                openedRule = opened,
+                isNew = false,
+            )
+        )
+    }
+
+    @Test fun `knownConversation and MessagingApps looksLikeMessaging classify rules and packages`() {
+        val refByName = ConversationRef(pkg = "com.example", name = "Alex")
+        val refByKey = ConversationRef(pkg = "com.example", name = "Renamed", key = "id-1")
+        val known = listOf(refByName, refByKey)
+
+        assertNull(knownConversation(rule(), known))
+        assertEquals(refByName, knownConversation(rule().copy(conversationName = "  alex! "), known))
+        assertEquals(refByKey, knownConversation(rule().copy(conversationName = "Alex", conversationKey = "id-1"), known))
+        assertTrue(MessagingApps.looksLikeMessaging("com.whatsapp"))
+        assertFalse(MessagingApps.looksLikeMessaging("com.example.calculator"))
+    }
+
+    @Test fun `clock formats zero padded 24 hour time`() {
+        assertEquals("00:00", clock(0))
+        assertEquals("07:05", clock(7 * 60 + 5))
+        assertEquals("23:00", clock(23 * 60))
+    }
+
     private fun rule(
         pkg: String = "com.example",
         trigger: Trigger = Trigger.NOTIFICATION,
     ) = AppRule(pkg = pkg, label = "Example", trigger = trigger)
 }
+

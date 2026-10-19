@@ -284,7 +284,19 @@ public final class HiLightUserService extends IHiLightService.Stub {
     private static boolean anyAdbHelperExists() {
         File[] processes = new File("/proc").listFiles();
         if (processes == null) return true;
+        int selfPid = -1;
+        try {
+            selfPid = android.os.Process.myPid();
+        } catch (RuntimeException ignored) {
+        }
         for (File process : processes) {
+            int pid;
+            try {
+                pid = Integer.parseInt(process.getName());
+            } catch (NumberFormatException ignored) {
+                continue;
+            }
+            if (pid == selfPid) continue;
             byte[] cmdline = readCmdline(process);
             if (cmdline != null && isExactAdbHelperCmdline(cmdline, null)) return true;
             // Same-UID cmdlines are normally readable. Treat a transiently unreadable shell-UID

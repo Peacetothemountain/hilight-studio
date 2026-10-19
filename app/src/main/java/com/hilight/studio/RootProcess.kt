@@ -77,8 +77,9 @@ internal object RootProcess {
                 if (!process.waitFor(500, TimeUnit.MILLISECONDS)) process.destroyForcibly()
             }
             // No concurrent blocking read owns the stream lock, even if a descendant holds stdout.
-            stream.close()
-            process.errorStream.close()
+            runCatching { process.outputStream.close() }
+            runCatching { stream.close() }
+            runCatching { process.errorStream.close() }
         }
     }
 }

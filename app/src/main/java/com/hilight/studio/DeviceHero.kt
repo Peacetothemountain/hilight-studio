@@ -36,6 +36,9 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import kotlin.math.cos
 import kotlin.math.sin
@@ -137,6 +140,7 @@ fun DeviceHero(
             .semantics { contentDescription = description },
     ) {
         Canvas(Modifier.fillMaxWidth().height(heightDp.dp)) {
+            if (size.width <= 0f || size.height <= 0f) return@Canvas
             // Stage studio backdrop with radial lighting
             drawRect(Stage)
             drawRect(
@@ -901,11 +905,14 @@ fun rememberLedFrame(pattern: Pattern, cfg: Ambient, active: Boolean = true): In
     if (!active || staticPattern) {
         return initialFrame
     }
-    val frame by produceState(initialFrame, pattern, cfg, active) {
-        val start = System.currentTimeMillis()
-        while (true) {
-            value = Renderer.frame(pattern, System.currentTimeMillis() - start, cfg)
-            delay(33)                       // Light.getMinUpdatePeriodMillis()
+    val owner = LocalLifecycleOwner.current
+    val frame by produceState(initialFrame, pattern, cfg, active, owner) {
+        owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            val start = android.os.SystemClock.elapsedRealtime()
+            while (true) {
+                value = Renderer.frame(pattern, android.os.SystemClock.elapsedRealtime() - start, cfg)
+                delay(33)                       // Light.getMinUpdatePeriodMillis()
+            }
         }
     }
     return frame
@@ -930,6 +937,7 @@ fun LedStrip(
             .height(heightDp.dp)
             .semantics { contentDescription = label },
     ) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
         val n = frame.size
         val gap = size.width / (n * 3.2f)
         val d = (size.width - gap * (n - 1)) / n
@@ -975,15 +983,20 @@ fun HiLightDiffuserPreview(
         label = "diffuserBloom",
     )
     val clipPathObj = remember { Path() }
+    val patternName = stringResource(pattern.labelRes)
+    val label = if (active) stringResource(R.string.hero_strip_preview, patternName)
+    else stringResource(R.string.hero_strip_off, patternName)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(108.dp)
-            .padding(horizontal = 4.dp),
+            .padding(horizontal = 4.dp)
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
+            if (size.width <= 0f || size.height <= 0f) return@Canvas
             val w = size.width
             val h = size.height
             val barW = (w * 0.94f).coerceAtMost(360.dp.toPx())

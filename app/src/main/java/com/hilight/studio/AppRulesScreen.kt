@@ -49,10 +49,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.border
@@ -200,7 +198,7 @@ fun AppRulesScreen(store: Store) {
         }
         if (suggestedApps.isNotEmpty()) {
             Spacer(Modifier.height(10.dp))
-            Caption("Quick Setup")
+            Caption(stringResource(R.string.rules_quick_setup))
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -208,6 +206,7 @@ fun AppRulesScreen(store: Store) {
                 suggestedApps.forEach { app ->
                     Row(
                         Modifier
+                            .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
                             .clickable {
                                 if (offersConversations(store, app)) scoping = app
@@ -305,7 +304,22 @@ fun AppRulesScreen(store: Store) {
         },
         onToggle = { store.upsertPrivacyRule(it.copy(enabled = !it.enabled), replacing = it) },
         onEdit = { editingPrivacy = it },
-        onTest = { launchPreview(it.pattern, it.color, it.speedMs, it.brightness, it.lightMs) },
+        onTest = {
+            launchPreview(
+                it.pattern,
+                it.color,
+                it.speedMs,
+                it.brightness,
+                it.lightMs,
+                look = Ambient(
+                    pattern = it.pattern,
+                    color = it.color,
+                    secondColor = it.secondColor,
+                    speedMs = it.speedMs,
+                    brightness = it.brightness,
+                ),
+            )
+        },
         onDelete = store::removePrivacyRule,
     )
 
@@ -359,7 +373,19 @@ fun AppRulesScreen(store: Store) {
                     )
                     // A chat that already has a rule opens that rule instead of a blank one. Both share
                     // an id, so saving the blank one would overwrite the colour already chosen for them.
-                    val stored = rules.firstOrNull { it.pkg == fresh.pkg && it.trigger == fresh.trigger && it.conversationKey == fresh.conversationKey && it.conversationName == fresh.conversationName }
+                    val freshKey = fresh.conversationKey?.takeIf { it.isNotBlank() }
+                    val freshNorm = ConversationMatch.normalise(fresh.conversationName)
+                    val stored = rules.firstOrNull { saved ->
+                        saved.pkg == fresh.pkg &&
+                            saved.trigger == fresh.trigger &&
+                            saved.isConversationRule &&
+                            (
+                                (freshKey != null && saved.conversationKey == freshKey) ||
+                                    (saved.conversationKey.isNullOrBlank() &&
+                                        freshNorm.isNotEmpty() &&
+                                        ConversationMatch.normalise(saved.conversationName) == freshNorm)
+                                )
+                    }
                     editing = RuleEditorState(stored ?: fresh.copy(stableId = java.util.UUID.randomUUID().toString()), isNew = stored == null)
                 }
             },
@@ -462,7 +488,20 @@ fun AppRulesScreen(store: Store) {
                 editingPrivacy = null
             },
             onTest = {
-                launchPreview(it.pattern, it.color, it.speedMs, it.brightness, it.lightMs)
+                launchPreview(
+                    it.pattern,
+                    it.color,
+                    it.speedMs,
+                    it.brightness,
+                    it.lightMs,
+                    look = Ambient(
+                        pattern = it.pattern,
+                        color = it.color,
+                        secondColor = it.secondColor,
+                        speedMs = it.speedMs,
+                        brightness = it.brightness,
+                    ),
+                )
             },
         )
     }
@@ -496,7 +535,6 @@ private fun RuleCard(
     onTest: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    val haptics = LocalHapticFeedback.current
     val perChat = rule.isConversationRule
     val context = LocalContext.current
     val iconColor by produceState<Int?>(null, rule.pkg, rule.useAppColor) {
@@ -672,11 +710,14 @@ fun AppPickerDialog(
                     value = query,
                     onValueChange = { query = it },
                     label = { Text(stringResource(R.string.rules_picker_search)) },
+                    singleLine = true,
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 val shown = remember(apps, query) {
-                    apps.filter { it.label.contains(query, ignoreCase = true) }
+                    val trimmed = query.trim()
+                    if (trimmed.isEmpty()) apps
+                    else apps.filter { it.label.contains(trimmed, ignoreCase = true) }
                 }
                 LazyColumn(Modifier.heightIn(max = 380.dp)) {
                     // a rule that covers every app without one of its own
@@ -812,10 +853,10 @@ private fun RuleEditorDialog(
     onCopy: ((AppRule) -> Unit)?,
     onAddPrivacy: (() -> Unit)?,
 ) {
-    var r by remember { mutableStateOf(rule) }
-    var confirmingFaceDown by remember { mutableStateOf(false) }
-    var pickingPreset by remember { mutableStateOf(false) }
-    var pickingExcludedApp by remember { mutableStateOf(false) }
+    var r by remember(rule) { mutableStateOf(rule) }
+    var confirmingFaceDown by remember(rule) { mutableStateOf(false) }
+    var pickingPreset by remember(rule) { mutableStateOf(false) }
+    var pickingExcludedApp by remember(rule) { mutableStateOf(false) }
     val ctx = LocalContext.current
     var iconColor by remember(r.pkg) { mutableStateOf<Int?>(null) }
     LaunchedEffect(r.pkg, r.useAppColor) {

@@ -26,9 +26,11 @@ internal fun safeRootPush(json: String, status: HelperStatus): AdbPushDecision {
     val parsed = runCatching { JSONObject(json) }.getOrNull()
     val explicitlyDisabled = parsed?.has("enabled") == true &&
         !parsed.optBoolean("enabled", true) &&
-        !parsed.optBoolean("privacyOutputEnabled", false)
+        !parsed.optBoolean("privacyOutputEnabled", false) &&
+        (!parsed.has("alert") || parsed.isNull("alert"))
     if (explicitlyDisabled) {
-        return AdbPushDecision(json, AdbPushSafety.BROADCAST_DISABLED)
+        parsed.remove("bridgeRendererInstanceId")
+        return AdbPushDecision(parsed.toString(), AdbPushSafety.BROADCAST_DISABLED)
     }
     val revision = parsed?.optLong("stateRevision", 0L)?.coerceAtLeast(0L) ?: 0L
     return AdbPushDecision(
@@ -83,8 +85,10 @@ class RootBackend(private val ctx: Context) : Backend {
     fun errorText(): String? = lastError
 
     fun refreshPresence() {
-        if (starting || checkingPresence) return
-        checkingPresence = true
+        synchronized(this) {
+            if (starting || checkingPresence) return
+            checkingPresence = true
+        }
         Thread({
             try {
                 if (_state.value == State.RUNNING) {
@@ -100,20 +104,31 @@ class RootBackend(private val ctx: Context) : Backend {
                     }
                 }
                 val available = runPlain("command -v su").code == 0
-                update(if (available) State.AVAILABLE else State.UNAVAILABLE)
+                if (!starting && (_state.value != State.RUNNING || !status().alive)) {
+                    update(if (available) State.AVAILABLE else State.UNAVAILABLE)
+                }
             } catch (t: Throwable) {
-                lastError = t.message ?: t.javaClass.simpleName
-                update(State.ERROR)
+                if (!starting && _state.value != State.RUNNING) {
+                    lastError = t.message ?: t.javaClass.simpleName
+                    update(State.ERROR)
+                }
             } finally {
-                checkingPresence = false
+                synchronized(this) {
+                    checkingPresence = false
+                }
             }
         }, "hilight-root-check").apply { isDaemon = true }.start()
     }
 
     /** Starts only after Store has staged an output-disabled state with [stagedRevision]. */
     fun ensureStarted(stagedRevision: Long, onComplete: (Boolean) -> Unit) {
-        if (starting) return
-        starting = true
+        synchronized(this) {
+            if (starting) {
+                main.post { onComplete(false) }
+                return
+            }
+            starting = true
+        }
         attempt = RootAttemptDiagnostics(RootStartupPhase.PERMISSION)
         Thread({
             var ok = false
@@ -176,7 +191,9 @@ class RootBackend(private val ctx: Context) : Backend {
                 cleanupOwned()
                 update(State.ERROR)
             } finally {
-                starting = false
+                synchronized(this) {
+                    starting = false
+                }
                 val result = ok || _state.value == State.RUNNING
                 main.post { onComplete(result) }
             }
@@ -291,6 +308,7 @@ class RootBackend(private val ctx: Context) : Backend {
         val deadline = SystemClock.elapsedRealtime() + RELEASE_TIMEOUT_MS
         var observedPid = -1
         var observedOwner = ""
+        var observedInstanceId = ""
         var unresolvedSamples = 0
         while (SystemClock.elapsedRealtime() < deadline) {
             val status = Bridge.readStatus(ctx)
@@ -310,15 +328,16 @@ class RootBackend(private val ctx: Context) : Backend {
                 // resolve that exact PID instead of treating heartbeat expiry as release proof.
                 val pid = status.pid.takeIf { it > 0 } ?: observedPid
                 val owner = status.owner.takeIf { it == "adb" || it == "root" } ?: observedOwner
+                val instanceId = status.rendererInstanceId.ifEmpty { observedInstanceId }
                 if (pid > 0 && (owner == "adb" || owner == "root")) {
                     val stopped = runSu(
-                        RootCommand.stop(pid, owner, status.rendererInstanceId),
+                        RootCommand.stop(pid, owner, instanceId),
                         PROCESS_EXIT_TIMEOUT_SECONDS,
                     )
                     if (stopped.code != 0) {
                         throw IllegalStateException("stale heartbeat pid did not match renderer")
                     }
-                    Bridge.forgetStatusInstance(status.rendererInstanceId)
+                    Bridge.forgetStatusInstance(instanceId)
                     return
                 }
                 if (observedPid > 0) {
@@ -332,6 +351,7 @@ class RootBackend(private val ctx: Context) : Backend {
             if (status.pid <= 0) throw IllegalStateException("existing renderer returned no pid")
             observedPid = status.pid
             observedOwner = status.owner
+            observedInstanceId = status.rendererInstanceId
             // Old helpers cannot produce the new release fence. Exact PID/owner validation followed
             // by TERM is the upgrade path; the current helper's synchronous startup cleanup handles
             // any panel state that survived the stale process.

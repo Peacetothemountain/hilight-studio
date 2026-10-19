@@ -181,13 +181,16 @@ object Bridge {
         private var unreleasedFatal: Good? = null
         /** Exact verified-exited identities whose stale on-disk heartbeat must not resurrect them. */
         private val forgotten = LinkedHashMap<ProcessIdentity, Long>()
+        private val forgottenInstances = LinkedHashSet<String>()
 
         @Synchronized
         fun read(raw: String?, nowMs: Long, nowElapsedMs: Long? = null): HelperStatus {
             val parsedFromDisk = parseGood(raw)
             val parsed = parsedFromDisk?.takeUnless {
+                val instanceId = it.status.rendererInstanceId
+                val forgottenInstance = instanceId.isNotEmpty() && instanceId in forgottenInstances
                 val forgottenAt = forgotten[it.identity()]
-                forgottenAt != null && it.timestampMs <= forgottenAt
+                forgottenInstance || (forgottenAt != null && it.timestampMs <= forgottenAt)
             }
             parsed?.also {
                 lastGood = it
@@ -222,6 +225,13 @@ object Bridge {
 
         @Synchronized
         fun forget(rendererInstanceId: String) {
+            if (rendererInstanceId.isNotEmpty() && validInstanceId(rendererInstanceId)) {
+                forgottenInstances.remove(rendererInstanceId)
+                forgottenInstances.add(rendererInstanceId)
+                while (forgottenInstances.size > MAX_FORGOTTEN_IDENTITIES) {
+                    forgottenInstances.remove(forgottenInstances.first())
+                }
+            }
             unreleasedFatal?.takeIf {
                 it.status.rendererInstanceId == rendererInstanceId
             }?.let(::rememberForgotten)

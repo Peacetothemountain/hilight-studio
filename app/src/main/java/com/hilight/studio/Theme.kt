@@ -13,7 +13,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,7 +82,7 @@ private val PixelTypography = Typography().let { base ->
         titleLarge = base.titleLarge.copy(fontWeight = FontWeight.Medium, letterSpacing = 0.sp),
         titleMedium = base.titleMedium.copy(fontWeight = FontWeight.Medium),
         titleSmall = base.titleSmall.copy(fontWeight = FontWeight.Medium),
-        labelLarge = TextStyle(fontWeight = FontWeight.Medium, fontSize = 14.sp, letterSpacing = 0.1.sp),
+        labelLarge = base.labelLarge.copy(fontWeight = FontWeight.Medium, fontSize = 14.sp, letterSpacing = 0.1.sp),
         bodyMedium = base.bodyMedium.copy(lineHeight = 21.sp),
     )
 }

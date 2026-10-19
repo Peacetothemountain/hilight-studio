@@ -38,6 +38,7 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.atomic.AtomicBoolean
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -194,7 +195,7 @@ fun SetupScreen(store: Store) {
     var forgetting by remember { mutableStateOf(false) }
     var checkingForUpdates by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
-    var downloadingUpdate by remember { mutableStateOf(false) }
+    var downloadingUpdate by remember { mutableStateOf(isDownloadingApk.get()) }
     var selfTestCountdown by remember { mutableIntStateOf(0) }
     var selfTestWarning by remember { mutableStateOf<String?>(null) }
     var confirmingFaceDown by remember { mutableStateOf(false) }
@@ -516,7 +517,7 @@ fun SetupScreen(store: Store) {
         )
         Caption(stringResource(R.string.setup_notif_body))
         FilledTonalButton(
-            onClick = { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) },
+            onClick = { runCatching { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) } },
         ) { ButtonLabel(stringResource(R.string.setup_open_notif_access)) }
         Caption(stringResource(R.string.setup_inspector_body))
         TextButton(onClick = { inspecting = true }) {
@@ -552,7 +553,7 @@ fun SetupScreen(store: Store) {
             },
         )
         Caption(stringResource(R.string.setup_usage_body))
-        FilledTonalButton(onClick = { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }) {
+        FilledTonalButton(onClick = { runCatching { ctx.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) } }) {
             ButtonLabel(stringResource(R.string.setup_open_usage_access))
         }
     }
@@ -912,10 +913,11 @@ private fun AdbCard(ctx: Context) {
 @Composable
 fun QuickSettingsTileCard(ctx: Context) {
     PixelCard {
-        SectionTitle("Quick Settings Tile")
-        Caption("Add the HiLight tile to your Quick Settings panel to quickly toggle ambient lighting, flashlight, or stock effects from anywhere.")
+        SectionTitle(stringResource(R.string.setup_qs_tile_title))
+        Caption(stringResource(R.string.setup_qs_tile_body))
         FilledTonalButton(
             onClick = {
+                val appCtx = ctx.applicationContext
                 val sbm = ctx.getSystemService(android.app.StatusBarManager::class.java)
                 val cn = android.content.ComponentName(ctx, HiLightTile::class.java)
                 sbm?.requestAddTileService(
@@ -924,12 +926,12 @@ fun QuickSettingsTileCard(ctx: Context) {
                     android.graphics.drawable.Icon.createWithResource(ctx, R.drawable.hilight_logo),
                     { r -> ctx.mainExecutor.execute(r) },
                     { result ->
-                        val msg = when (result) {
-                            android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "Tile added to Quick Settings!"
-                            android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "Tile is already in Quick Settings."
-                            else -> "Quick Settings request opened."
+                        val msgRes = when (result) {
+                            android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> R.string.setup_qs_tile_added
+                            android.app.StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> R.string.setup_qs_tile_already_added
+                            else -> R.string.setup_qs_tile_opened
                         }
-                        Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(appCtx, appCtx.getString(msgRes), Toast.LENGTH_SHORT).show()
                     }
                 )
             },
@@ -937,7 +939,7 @@ fun QuickSettingsTileCard(ctx: Context) {
         ) {
             Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            ButtonLabel("Add HiLight Tile to Quick Settings")
+            ButtonLabel(stringResource(R.string.setup_qs_tile_button))
         }
     }
 }
@@ -945,23 +947,25 @@ fun QuickSettingsTileCard(ctx: Context) {
 @Composable
 fun WirelessAdbCard(ctx: Context) {
     PixelCard {
-        SectionTitle("Wireless Debugging & On-Device Setup")
-        Caption("Run HiLight completely wire-free using Android 11+ Wireless Debugging without connecting to a computer.")
+        SectionTitle(stringResource(R.string.setup_wireless_adb_title))
+        Caption(stringResource(R.string.setup_wireless_adb_body))
         FilledTonalButton(
             onClick = {
                 try {
                     val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
                     ctx.startActivity(intent)
-                } catch (t: Throwable) {
-                    val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
-                    ctx.startActivity(intent)
+                } catch (_: Throwable) {
+                    runCatching {
+                        val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
+                        ctx.startActivity(intent)
+                    }
                 }
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            ButtonLabel("Open Developer Options")
+            ButtonLabel(stringResource(R.string.setup_wireless_adb_button))
         }
     }
 }
@@ -1000,13 +1004,14 @@ private fun openExternalUrl(ctx: Context, pageUrl: String) {
 }
 
 private const val MAX_APK_BYTES = 64L * 1024 * 1024
-@Volatile private var isDownloadingApk = false
+private val isDownloadingApk = AtomicBoolean(false)
 
 private fun downloadAndInstallApk(ctx: Context, apkUrl: String, onProgress: (Boolean) -> Unit) {
-    if (isDownloadingApk) return
-    isDownloadingApk = true
+    if (!isDownloadingApk.compareAndSet(false, true)) return
+    val appCtx = ctx.applicationContext
     onProgress(true)
     Thread {
+        var apkFile: File? = null
         try {
             val url = URL(apkUrl)
             require(url.protocol.equals("https", ignoreCase = true)) { "HTTPS required" }
@@ -1020,12 +1025,13 @@ private fun downloadAndInstallApk(ctx: Context, apkUrl: String, onProgress: (Boo
                     "HTTP ${connection.responseCode}"
                 }
 
-                val updateDir = File(ctx.cacheDir, "updates").apply { mkdirs() }
-                val apkFile = File(updateDir, "HiLightStudioUpdate.apk")
-                if (apkFile.exists()) apkFile.delete()
+                val updateDir = File(appCtx.cacheDir, "updates").apply { mkdirs() }
+                val targetFile = File(updateDir, "HiLightStudioUpdate.apk")
+                apkFile = targetFile
+                if (targetFile.exists()) targetFile.delete()
 
                 connection.inputStream.use { input ->
-                    apkFile.outputStream().use { output ->
+                    targetFile.outputStream().use { output ->
                         val buffer = ByteArray(8192)
                         var total = 0L
                         while (true) {
@@ -1040,42 +1046,43 @@ private fun downloadAndInstallApk(ctx: Context, apkUrl: String, onProgress: (Boo
                     }
                 }
 
-                val archiveInfo = ctx.packageManager.getPackageArchiveInfo(
-                    apkFile.absolutePath,
+                val archiveInfo = appCtx.packageManager.getPackageArchiveInfo(
+                    targetFile.absolutePath,
                     android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES,
                 )
-                if (archiveInfo == null || archiveInfo.packageName != ctx.packageName) {
-                    apkFile.delete()
+                if (archiveInfo == null || archiveInfo.packageName != appCtx.packageName) {
+                    targetFile.delete()
                     throw SecurityException("APK package mismatch")
                 }
 
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    isDownloadingApk = false
+                    isDownloadingApk.set(false)
                     onProgress(false)
                     try {
                         val uri = FileProvider.getUriForFile(
-                            ctx,
-                            "${ctx.packageName}.provider",
-                            apkFile,
+                            appCtx,
+                            "${appCtx.packageName}.provider",
+                            targetFile,
                         )
                         val intent = Intent(Intent.ACTION_VIEW).apply {
                             setDataAndType(uri, "application/vnd.android.package-archive")
                             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
-                        ctx.startActivity(intent)
+                        appCtx.startActivity(intent)
                     } catch (e: Exception) {
-                        Toast.makeText(ctx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
+                        Toast.makeText(appCtx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
                     }
                 }
             } finally {
                 connection.disconnect()
             }
         } catch (e: Exception) {
+            apkFile?.delete()
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                isDownloadingApk = false
+                isDownloadingApk.set(false)
                 onProgress(false)
-                Toast.makeText(ctx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
+                Toast.makeText(appCtx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
             }
         }
     }.start()
@@ -1119,5 +1126,7 @@ private fun pickTime(ctx: Context, currentMinutes: Int, onPicked: (Int) -> Unit)
 private fun hasNotificationAccess(ctx: Context): Boolean {
     val flat = Settings.Secure.getString(ctx.contentResolver, "enabled_notification_listeners")
         ?: return false
-    return flat.contains(ctx.packageName)
+    return flat.split(':').any {
+        android.content.ComponentName.unflattenFromString(it)?.packageName == ctx.packageName
+    }
 }

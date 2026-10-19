@@ -48,13 +48,18 @@ object BrandColors {
     const val DEFAULT_FALLBACK = 0xFF00E676.toInt()
 
     fun detectColor(ctx: Context?, pkg: String): Int {
+        if (pkg.isBlank() || pkg == AppRule.ANY_APP) return DEFAULT_FALLBACK
         SIGNATURES[pkg]?.let { return it }
         if (ctx != null) {
             runCatching {
                 val icon = ctx.packageManager.getApplicationIcon(pkg)
                 val bmp = icon.toBitmap(48, 48)
-                val extracted = extractProminentColor(bmp)
-                if (extracted != null) return extracted
+                try {
+                    val extracted = extractProminentColor(bmp)
+                    if (extracted != null) return extracted
+                } finally {
+                    bmp.recycle()
+                }
             }
         }
         return DEFAULT_FALLBACK
@@ -83,8 +88,8 @@ object BrandColors {
                 val sat = hsv[1]
                 val value = hsv[2]
 
-                // Ignore near-greyscale, near-black, and washed out white
-                if (sat < 0.25f || value < 0.2f || (sat < 0.2f && value > 0.85f)) continue
+                // Ignore near-greyscale and near-black
+                if (sat < 0.25f || value < 0.2f) continue
 
                 // Score by vibrancy and saturation
                 val score = sat * 1.5f + value

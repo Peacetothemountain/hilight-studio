@@ -35,6 +35,7 @@ final class AppOpsWatcher {
 
     private ScheduledExecutorService worker;
     private boolean desired;
+    private long generation;
     private long retryMs = RETRY_MIN_MS;
     private AppOpsManager manager;
     private AppOpsManager.OnOpActiveChangedListener callback;
@@ -60,6 +61,7 @@ final class AppOpsWatcher {
         synchronized (lock) {
             if (desired) return;
             desired = true;
+            final long gen = ++generation;
             retryMs = RETRY_MIN_MS;
             worker = Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "hilight-appops");
@@ -67,7 +69,7 @@ final class AppOpsWatcher {
                 return t;
             });
             state = State.STARTING;
-            worker.execute(this::connect);
+            worker.execute(() -> connect(gen));
         }
     }
 
@@ -75,6 +77,7 @@ final class AppOpsWatcher {
         ScheduledExecutorService toStop;
         synchronized (lock) {
             if (!desired && state == State.STOPPED) return;
+            generation++;
             desired = false;
             disconnectLocked();
             state = State.STOPPED;
@@ -85,9 +88,9 @@ final class AppOpsWatcher {
         if (toStop != null) toStop.shutdownNow();
     }
 
-    private void connect() {
+    private void connect(long gen) {
         synchronized (lock) {
-            if (!desired) return;
+            if (!desired || generation != gen) return;
             disconnectLocked();
             state = State.STARTING;
         }
@@ -95,13 +98,13 @@ final class AppOpsWatcher {
             IBinder serviceBinder = serviceBinder();
             AppOpsManager appOps = createManager(serviceBinder);
             AppOpsManager.OnOpActiveChangedListener activeListener =
-                    (op, uid, packageName, active) -> requestRefresh();
-            IBinder.DeathRecipient died = this::requestReconnect;
+                    (op, uid, packageName, active) -> requestRefresh(gen);
+            IBinder.DeathRecipient died = () -> requestReconnect(gen);
             serviceBinder.linkToDeath(died, 0);
-            appOps.startWatchingActive(OPS, command -> request(command), activeListener);
+            appOps.startWatchingActive(OPS, command -> request(command, gen), activeListener);
 
             synchronized (lock) {
-                if (!desired) {
+                if (!desired || generation != gen) {
                     runCatchingStop(appOps, activeListener, serviceBinder, died);
                     return;
                 }
@@ -112,18 +115,18 @@ final class AppOpsWatcher {
                 retryMs = RETRY_MIN_MS;
                 state = State.ACTIVE;
             }
-            refresh();
+            refresh(gen);
             Log.i("privacy activity watcher active");
         } catch (Throwable t) {
-            retry(t);
+            retry(t, gen);
         }
     }
 
     /** Callbacks only invalidate the snapshot; they are not reference counts. */
-    private void refresh() {
+    private void refresh(long gen) {
         AppOpsManager appOps;
         synchronized (lock) {
-            if (!desired || manager == null) return;
+            if (!desired || generation != gen || manager == null) return;
             appOps = manager;
         }
         try {
@@ -140,15 +143,16 @@ final class AppOpsWatcher {
                 for (Object packageOps : (List<?>) raw) readPackage(packageOps, active);
             }
             synchronized (lock) {
-                if (!desired) return;
+                if (!desired || generation != gen) return;
             }
             listener.onSnapshot(Collections.unmodifiableSet(active));
         } catch (Throwable t) {
-            retry(t);
+            retry(t, gen);
         }
     }
 
     private static void readPackage(Object packageOps, Set<PrivacyScheduler.Use> out) throws Exception {
+        if (packageOps == null) return;
         Class<?> type = packageOps.getClass();
         Method pkgMethod = getPackageNameMethod;
         if (pkgMethod == null) {
@@ -166,18 +170,21 @@ final class AppOpsWatcher {
             getOpsMethod = opsMethod;
         }
         String pkg = (String) pkgMethod.invoke(packageOps);
-        int uid = (Integer) uidMethod.invoke(packageOps);
+        Object uidObj = uidMethod.invoke(packageOps);
+        if (pkg == null || !(uidObj instanceof Integer)) return;
+        int uid = (Integer) uidObj;
         Object entries = opsMethod.invoke(packageOps);
         if (!(entries instanceof List<?>)) return;
         for (Object entry : (List<?>) entries) {
+            if (entry == null) continue;
             Class<?> entryType = entry.getClass();
             Method runningMethod = isRunningMethod;
             if (runningMethod == null) {
                 runningMethod = cachedMethod(entryType, "isRunning");
                 isRunningMethod = runningMethod;
             }
-            boolean running = (Boolean) runningMethod.invoke(entry);
-            if (!running) continue;
+            Object runningObj = runningMethod.invoke(entry);
+            if (!Boolean.TRUE.equals(runningObj)) continue;
             Method opStrMethod = getOpStrMethod;
             if (opStrMethod == null) {
                 opStrMethod = cachedMethod(entryType, "getOpStr");
@@ -201,17 +208,20 @@ final class AppOpsWatcher {
         return null;
     }
 
-    private void requestRefresh() {
-        request(this::refresh);
+    private void requestRefresh(long gen) {
+        request(() -> refresh(gen), gen);
     }
 
-    private void requestReconnect() {
-        request(() -> retry(new IllegalStateException("appops binder died")));
+    private void requestReconnect(long gen) {
+        request(() -> retry(new IllegalStateException("appops binder died"), gen), gen);
     }
 
-    private void request(Runnable command) {
+    private void request(Runnable command, long gen) {
         ScheduledExecutorService current;
-        synchronized (lock) { current = worker; }
+        synchronized (lock) {
+            if (!desired || generation != gen) return;
+            current = worker;
+        }
         if (current == null || current.isShutdown()) return;
         try {
             current.execute(command);
@@ -220,11 +230,11 @@ final class AppOpsWatcher {
         }
     }
 
-    private void retry(Throwable failure) {
+    private void retry(Throwable failure, long gen) {
         long delay;
         ScheduledExecutorService current;
         synchronized (lock) {
-            if (!desired) return;
+            if (!desired || generation != gen) return;
             disconnectLocked();
             state = State.RETRYING;
             delay = retryMs;
@@ -234,7 +244,11 @@ final class AppOpsWatcher {
         listener.onSnapshot(Collections.emptySet());
         Log.w("privacy watcher unavailable (" + rootType(failure) + "), retrying");
         if (current != null && !current.isShutdown()) {
-            current.schedule(this::connect, delay, TimeUnit.MILLISECONDS);
+            try {
+                current.schedule(() -> connect(gen), delay, TimeUnit.MILLISECONDS);
+            } catch (RuntimeException ignored) {
+                // stop() won the race; there is no watcher left to retry
+            }
         }
     }
 

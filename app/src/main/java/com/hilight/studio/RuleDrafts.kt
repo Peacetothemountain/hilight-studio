@@ -31,6 +31,7 @@ internal fun copyWholeAppRule(
         pkg = targetPkg,
         label = targetLabel,
         keyword = "",
+        excludedPackages = if (targetPkg == AppRule.ANY_APP) source.excludedPackages else emptySet(),
         conversationKey = null,
         conversationName = null,
         includeGroups = false,
@@ -45,7 +46,8 @@ internal fun replacesExistingRule(
     openedRule: AppRule,
     isNew: Boolean,
 ): Boolean = existing.any { saved ->
-    saved.id == candidate.id && (isNew || saved != openedRule)
+    saved.id == candidate.id &&
+        (isNew || (saved != openedRule && !ConversationMatch.isHealOf(saved, openedRule)))
 }
 
 /** Filter before choosing a winner so a nonmatching text rule cannot swallow a fallback. */

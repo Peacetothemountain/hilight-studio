@@ -28,7 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
@@ -43,11 +45,12 @@ fun DeviceSignalsSection(store: Store) {
         Caption(stringResource(R.string.device_signals_description))
 
         ToggleRow(stringResource(R.string.device_signals_charging), settings.chargingEnabled) {
+            if (!it && (expandedPicker == "charging" || expandedPicker == "charged")) expandedPicker = null
             store.deviceSignals.updateSettings { s -> s.copy(chargingEnabled = it) }
         }
         if (settings.chargingEnabled) {
             ToggleRow(stringResource(R.string.device_signals_gauge), settings.chargingGauge) {
-                store.deviceSignals.updateSettings { s -> s.copy(chargingGauge = it) }
+                store.setChargingGaugeEnabled(it)
             }
             Caption(
                 stringResource(
@@ -89,6 +92,7 @@ fun DeviceSignalsSection(store: Store) {
         }
 
         ToggleRow(stringResource(R.string.device_signals_dnd), settings.dndEnabled) {
+            if (!it && expandedPicker == "dnd") expandedPicker = null
             store.deviceSignals.updateSettings { s -> s.copy(dndEnabled = it) }
         }
         if (settings.dndEnabled) {
@@ -107,6 +111,7 @@ fun DeviceSignalsSection(store: Store) {
         }
 
         ToggleRow(stringResource(R.string.device_signals_calls), settings.callsEnabled) {
+            if (!it && expandedPicker == "calls") expandedPicker = null
             store.deviceSignals.updateSettings { s -> s.copy(callsEnabled = it) }
         }
         if (settings.callsEnabled) {
@@ -134,6 +139,7 @@ private fun SignalColorRow(
     onToggleExpand: () -> Unit,
     onColor: (Int) -> Unit,
 ) {
+    val view = LocalView.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier
@@ -143,7 +149,10 @@ private fun SignalColorRow(
                     if (expanded) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
                     else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
                 )
-                .clickable { onToggleExpand() }
+                .clickable(role = Role.Button) {
+                    PixelHaptics.click(view)
+                    onToggleExpand()
+                }
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
