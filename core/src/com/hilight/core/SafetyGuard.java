@@ -63,27 +63,32 @@ final class SafetyGuard {
             return frame;
         }
 
-        if (dim < 0.999) {
-            int[] dimmed = new int[frame.length];
-            for (int i = 0; i < frame.length; i++) dimmed[i] = Renderer.scale(frame[i], dim);
-            frame = dimmed;
-        }
-
         if (resting || litMsInWindow >= dutyWindowMs * maxDuty) {
             resting = true;
             noteOutput(false);
             return new int[]{0};
         }
 
-        if (continuousLitMs <= taperAfterMs) {
-            noteOutput(FrameVisibility.isVisible(frame));
+        boolean applyDim = dim < 0.999;
+        boolean applyTaper = continuousLitMs > taperAfterMs;
+        if (!applyDim && !applyTaper) {
+            noteOutput(true);
             return frame;
         }
 
-        double over = Math.min(1.0, (continuousLitMs - taperAfterMs) / (double) taperRampMs);
-        double scale = 1.0 - (1.0 - taperFloor) * over;
+        double taperScale = 1.0;
+        if (applyTaper) {
+            double over = Math.min(1.0, (continuousLitMs - taperAfterMs) / (double) taperRampMs);
+            taperScale = 1.0 - (1.0 - taperFloor) * over;
+        }
+
         int[] out = new int[frame.length];
-        for (int i = 0; i < frame.length; i++) out[i] = Renderer.scale(frame[i], scale);
+        for (int i = 0; i < frame.length; i++) {
+            int pixel = frame[i];
+            if (applyDim) pixel = Renderer.scale(pixel, dim);
+            if (applyTaper) pixel = Renderer.scale(pixel, taperScale);
+            out[i] = pixel;
+        }
         noteOutput(FrameVisibility.isVisible(out));
         return out;
     }

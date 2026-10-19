@@ -484,6 +484,12 @@ class Store private constructor(private val app: Context) {
 
     /** Package of the app whose FOREGROUND rule is currently held, if any. */
     private var foregroundOverride: Pair<String, JSONObject>? = null
+    private var foregroundOverrideRule: AppRule? = null
+    private var flashlightAlertId: Long = -1L
+    private var lastPushedDimFactor: Float = -1f
+    @Volatile private var cachedBatteryLevel: Int = -1
+    @Volatile private var cachedBatteryScale: Int = -1
+    @Volatile private var cachedBatteryPlugged: Boolean = false
 
     /**
      * The notification alert still meant to be on the array, if any.
@@ -569,6 +575,14 @@ class Store private constructor(private val app: Context) {
         app.registerReceiver(
             object : android.content.BroadcastReceiver() {
                 override fun onReceive(c: Context?, i: Intent?) {
+                    if (i?.action == Intent.ACTION_BATTERY_CHANGED) {
+                        val prevPct = if (cachedBatteryLevel >= 0 && cachedBatteryScale > 0) batteryPct() else -1
+                        cachedBatteryLevel = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+                        cachedBatteryScale = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+                        cachedBatteryPlugged = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
+                        if (prevPct != batteryPct()) refreshSuppression()
+                        return
+                    }
                     if (i?.action == Intent.ACTION_POWER_CONNECTED) {
                         triggerChargingGauge()
                     }
@@ -578,7 +592,9 @@ class Store private constructor(private val app: Context) {
                         ScreenLifecycleAction.CANCEL_AND_REFRESH -> {
                             // Unlocking means the notification has been seen. A screen wake alone
                             // cancels only a rule that explicitly requires the screen to stay off.
-                            cancelAlert()
+                            if (!(_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT)) {
+                                cancelAlert()
+                            }
                             refreshSuppression()
                         }
                         // A plain wake, power connection change, or Battery Saver change re-checks
@@ -593,6 +609,7 @@ class Store private constructor(private val app: Context) {
                 addAction(Intent.ACTION_USER_PRESENT)
                 addAction(Intent.ACTION_POWER_CONNECTED)
                 addAction(Intent.ACTION_POWER_DISCONNECTED)
+                addAction(Intent.ACTION_BATTERY_CHANGED)
                 addAction(android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
             },
         )
@@ -877,10 +894,11 @@ class Store private constructor(private val app: Context) {
         prefs.edit().putBoolean("faceDownOnly", v).apply()
         // Enabling first becomes fail-closed (STARTING); a stable sample alone releases the gate.
         syncForegroundWatcher()
-        refreshSuppression()
         // Disabling a guard is an explicit user action, like the other Setup toggles, so it may
         // reopen a bounded ambient window. Enabling the guard never arms before sensor proof.
-        pushCurrent(arm = !v)
+        if (!refreshSuppression(armOnRelease = !v)) {
+            pushCurrent(arm = !v)
+        }
     }
 
     fun setBatteryGuard(enabled: Boolean, minPct: Int = _batteryMinPct.value) {
@@ -890,15 +908,13 @@ class Store private constructor(private val app: Context) {
             .putBoolean("batteryGuard", enabled)
             .putInt("batteryMinPct", _batteryMinPct.value)
             .apply()
-        refreshSuppression()
-        pushCurrent()
+        if (!refreshSuppression()) pushCurrent()
     }
 
     fun setSaverGuard(v: Boolean) {
         _saverGuard.value = v
         prefs.edit().putBoolean("saverGuard", v).apply()
-        refreshSuppression()
-        pushCurrent()
+        if (!refreshSuppression()) pushCurrent()
     }
 
     fun setRespectDnd(v: Boolean) {
@@ -998,11 +1014,13 @@ class Store private constructor(private val app: Context) {
      */
     internal fun importRules(imported: List<AppRule>): RuleBackup.MergeResult {
         val merged = RuleBackup.merge(_rules.value, imported)
-        val json = JSONArray().also { a -> merged.rules.forEach { a.put(it.toPrefsJson()) } }
+        val stabilized = merged.rules.map { it.withStableIdentity() }
+        val json = JSONArray().also { a -> stabilized.forEach { a.put(it.toPrefsJson()) } }
         check(prefs.edit().putString("rules", json.toString()).commit()) { "Could not save rules" }
-        _rules.value = merged.rules.map { it.withStableIdentity() }
+        _rules.value = stabilized
+        pruneLastMatch()
         syncForegroundWatcher()
-        return merged
+        return merged.copy(rules = stabilized)
     }
 
     fun removeRule(rule: AppRule) {
@@ -1089,7 +1107,7 @@ class Store private constructor(private val app: Context) {
             it.enabled && it.trigger == trigger && !it.isConversationRule
         }
         return enabled.firstOrNull { it.pkg == pkg }
-            ?: enabled.firstOrNull { it.isCatchAll }
+            ?: enabled.firstOrNull { it.isCatchAll && pkg !in it.excludedPackages }
     }
 
     // ------------------------------------------------------------------ conversations
@@ -1261,12 +1279,12 @@ class Store private constructor(private val app: Context) {
         // nothing to tell their chats apart. Healing on the first of them to write would quietly narrow
         // the rule to that one person for good, while the card kept showing healthy matches from them —
         // so an ambiguous name is left matching on text, which is what the user actually asked for.
-        val ambiguous = _conversations.value.count { seen ->
+        val targetNorm = ConversationMatch.normalise(rule.conversationName)
+        val ambiguous = _conversations.value.any { seen ->
             seen.pkg == rule.pkg &&
-                ConversationMatch.normalise(seen.name) ==
-                ConversationMatch.normalise(rule.conversationName) &&
-                seen.key != null && seen.key != key
-        } > 0
+                seen.key != null && seen.key != key &&
+                ConversationMatch.normalise(seen.name) == targetNorm
+        }
         if (ambiguous) {
             Log.i(TAG, "not healing ${rule.pkg}: more than one known chat answers to that name")
             return rule
@@ -1292,12 +1310,13 @@ class Store private constructor(private val app: Context) {
         list: List<ConversationRef>,
         incoming: ConversationRef,
     ): List<ConversationRef> {
+        val incomingNorm = ConversationMatch.normalise(incoming.name)
         val slot = list.indexOfFirst { old ->
             if (old.pkg != incoming.pkg) return@indexOfFirst false
             // Two keys settle it outright: equal is the same chat, different is a different chat
             // whatever the two names happen to say.
             if (incoming.key != null && old.key != null) return@indexOfFirst incoming.key == old.key
-            sameName(incoming, old)
+            incomingNorm.isNotEmpty() && incomingNorm == ConversationMatch.normalise(old.name)
         }
         val out = ArrayList<ConversationRef>(list.size + 1)
         list.forEachIndexed { i, old ->
@@ -1316,7 +1335,8 @@ class Store private constructor(private val app: Context) {
             // a second, weaker copy of one chat, with nothing on screen to say which of the two will
             // still work once the contact is renamed.
             val redundant = incoming.key != null && old.key == null &&
-                old.pkg == incoming.pkg && sameName(incoming, old)
+                old.pkg == incoming.pkg &&
+                incomingNorm.isNotEmpty() && incomingNorm == ConversationMatch.normalise(old.name)
             if (!redundant) out += old
         }
         if (slot < 0) out += incoming
@@ -1396,6 +1416,7 @@ class Store private constructor(private val app: Context) {
             return
         }
         if (!_enabled.value) return
+        if (_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT) return
         if (rule.onlyWhenScreenOff && screenOn()) return
         if (_respectDnd.value && deviceSignals.shouldSuppressForDnd) return
         // NotificationTrigger checks this before posting here, and main checks again because the
@@ -1443,6 +1464,11 @@ class Store private constructor(private val app: Context) {
         screenOffGated: Boolean = false,
         owner: String? = null,
     ) {
+        if (owner != OWNER_FLASHLIGHT && _flashlightActive.value) {
+            _flashlightActive.value = false
+            flashlightAlertId = -1L
+            HiLightTile.refresh(app)
+        }
         activeAlert = alert
         activeAlertSource = source
         activeAlertOwner = owner
@@ -1469,6 +1495,7 @@ class Store private constructor(private val app: Context) {
 
     /** Drops the top layer and re-pushes whatever sits underneath it. */
     private fun releaseAlert() {
+        val wasFlashlight = _flashlightActive.value || activeAlertOwner == OWNER_FLASHLIGHT
         activeAlert = null
         activeAlertSource = null
         activeAlertOwner = null
@@ -1476,6 +1503,11 @@ class Store private constructor(private val app: Context) {
         activeAlertScreenOffGated = false
         alertIsPreview = false
         _previewLook.value = null
+        if (wasFlashlight) {
+            _flashlightActive.value = false
+            flashlightAlertId = -1L
+            HiLightTile.refresh(app)
+        }
         pushCurrent(arm = false)       // handing the layer back must not extend the ambient window
     }
 
@@ -1494,14 +1526,16 @@ class Store private constructor(private val app: Context) {
 
     /** Holds a look for as long as [pkg] is in the foreground. */
     fun setForegroundOverride(pkg: String?, rule: AppRule?) {
-        if (pkg == null || rule == null) {
-            if (foregroundOverride == null) return
+        if (pkg == null || rule == null || (rule.onlyWhenFaceDown && !isFaceDownNow())) {
+            if (foregroundOverride == null && foregroundOverrideRule == null) return
             foregroundOverride = null
+            foregroundOverrideRule = null
             pushCurrent(arm = false)
             return
         }
-        if (foregroundOverride?.first == pkg) return
+        if (foregroundOverride?.first == pkg && foregroundOverrideRule == rule) return
         val color = if (rule.randomColor) randomColor() else rule.color
+        foregroundOverrideRule = rule
         foregroundOverride = pkg to Bridge.lookAlertJson(
             id = Bridge.nextAlertId(),
             look = rule.effectiveLook(color),
@@ -1536,6 +1570,7 @@ class Store private constructor(private val app: Context) {
 
     internal fun showDeviceSignal(owner: String, look: Ambient, durationMs: Int): Boolean {
         if (!_enabled.value || guardState().alertSuppression() != null) return false
+        if (_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT) return false
         if (owner != DeviceSignals.OWNER_DND && _respectDnd.value && deviceSignals.shouldSuppressForDnd) return false
         // Background indicators must not cut short a message or a deliberate preview.
         if (activeAlert != null && activeAlertOwner != owner) return false
@@ -1599,6 +1634,7 @@ class Store private constructor(private val app: Context) {
      */
     fun stopPreview() {
         if (!alertIsPreview) return
+        if (_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT) return
         alertExpiry?.let { main.removeCallbacks(it) }
         alertExpiry = null
         // clears the test immediately, and does not hand ambient a fresh window on the way out
@@ -1616,11 +1652,17 @@ class Store private constructor(private val app: Context) {
         color: Int = _flashlightColor.value,
         brightness: Float = _flashlightBrightness.value,
     ) {
+        val wasActive = _flashlightActive.value
         _flashlightActive.value = active
         if (active) {
+            val id = if (wasActive && flashlightAlertId > 0L) {
+                flashlightAlertId
+            } else {
+                Bridge.nextAlertId().also { flashlightAlertId = it }
+            }
             holdAlert(
                 alert = Bridge.alertJson(
-                    id = Bridge.nextAlertId(),
+                    id = id,
                     pattern = Pattern.SOLID,
                     color = color,
                     durationMs = 0,
@@ -1629,18 +1671,25 @@ class Store private constructor(private val app: Context) {
                     source = AlertSource.PREVIEW,
                 ),
                 durationMs = 0,
-                arm = true,
+                arm = !wasActive,
                 preview = Ambient(
                     pattern = Pattern.SOLID,
                     color = color,
                     brightness = brightness,
                 ),
                 source = AlertSource.PREVIEW,
+                owner = OWNER_FLASHLIGHT,
             )
+            if (!wasActive) HiLightTile.refresh(app)
         } else {
-            alertExpiry?.let { main.removeCallbacks(it) }
-            alertExpiry = null
-            releaseAlert()
+            flashlightAlertId = -1L
+            if (activeAlertOwner == OWNER_FLASHLIGHT || (wasActive && activeAlert != null)) {
+                alertExpiry?.let { main.removeCallbacks(it) }
+                alertExpiry = null
+                releaseAlert()
+            } else if (wasActive) {
+                HiLightTile.refresh(app)
+            }
         }
     }
 
@@ -1666,11 +1715,15 @@ class Store private constructor(private val app: Context) {
     fun setChargingGaugeEnabled(enabled: Boolean) {
         _chargingGaugeEnabled.value = enabled
         prefs.edit().putBoolean("chargingGaugeEnabled", enabled).apply()
+        deviceSignals.updateSettings { it.copy(chargingGauge = enabled) }
     }
 
     /** Triggers the 8-LED charging battery fuel gauge on the visor for 4 seconds. */
     fun triggerChargingGauge() {
-        if (!_chargingGaugeEnabled.value) return
+        if (!_enabled.value || !_chargingGaugeEnabled.value) return
+        if (guardState().alertSuppression() != null) return
+        if (_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT) return
+        if (activeAlert != null && activeAlertOwner != DeviceSignals.OWNER_CHARGING) return
         val rawPct = actualBatteryPct()
         val numLeds = ((rawPct * LED_COUNT) / 100).coerceIn(1, LED_COUNT)
         val gaugeColors = IntArray(LED_COUNT) { i ->
@@ -1684,44 +1737,48 @@ class Store private constructor(private val app: Context) {
                 0x00000000
             }
         }
-        val alert = JSONObject().apply {
-            put("id", Bridge.nextAlertId())
-            put("mode", Pattern.CUSTOM.key)
-            put("pattern", Pattern.CUSTOM.key)
-            put("brightness", 1.0)
-            put("colors", JSONArray().also { a -> gaugeColors.forEach { a.put(it.toUInt().toLong()) } })
-            put("source", AlertSource.PREVIEW.key)
-            put("speedMs", 1000)
-            put("spread", false)
-        }
+        val look = Ambient(
+            pattern = Pattern.CUSTOM,
+            perLed = gaugeColors.toList(),
+            brightness = 1.0f,
+        )
         holdAlert(
-            alert = alert,
-            durationMs = 4000,
-            arm = true,
-            preview = Ambient(
-                pattern = Pattern.CUSTOM,
-                perLed = gaugeColors.toList(),
-                brightness = 1.0f,
+            alert = Bridge.lookAlertJson(
+                id = Bridge.nextAlertId(),
+                look = look,
+                durationMs = 4000,
+                source = AlertSource.NOTIFICATION,
             ),
-            source = AlertSource.PREVIEW,
+            durationMs = 4000,
+            arm = false,
+            preview = null,
+            source = AlertSource.NOTIFICATION,
+            owner = DeviceSignals.OWNER_CHARGING,
         )
     }
 
-    fun actualBatteryPct(): Int {
+    private fun ensureBatteryCache() {
+        if (cachedBatteryLevel >= 0 && cachedBatteryScale > 0) return
         val i = app.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-            ?: return 100
-        val level = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
-        val scale = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+            ?: return
+        cachedBatteryLevel = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        cachedBatteryScale = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+        cachedBatteryPlugged = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
+    }
+
+    fun actualBatteryPct(): Int {
+        ensureBatteryCache()
+        val level = cachedBatteryLevel
+        val scale = cachedBatteryScale
         return if (level >= 0 && scale > 0) (level * 100 / scale) else 100
     }
 
-    /** Battery level from the sticky broadcast — no receiver to keep alive. */
+    /** Battery level from the cached sticky broadcast. */
     private fun batteryPct(): Int {
-        val i = app.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-            ?: return 100
-        val level = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
-        val scale = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
-        val charging = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
+        ensureBatteryCache()
+        val level = cachedBatteryLevel
+        val scale = cachedBatteryScale
+        val charging = cachedBatteryPlugged
         if (level < 0 || scale <= 0) return 100
         // on the charger there is no reason to hold the array back
         return if (charging) 100 else level * 100 / scale
@@ -1773,6 +1830,13 @@ class Store private constructor(private val app: Context) {
         faceDownEffective = nowFaceDown
 
         if (!nowFaceDown && activeAlertFaceDownGated) cancelAlert()
+        if (!nowFaceDown && foregroundOverrideRule?.onlyWhenFaceDown == true) {
+            foregroundOverride = null
+            foregroundOverrideRule = null
+            if (wasFaceDown == nowFaceDown || _suppression.value == suppressionNow()) {
+                pushCurrent(arm = false)
+            }
+        }
         if (wasFaceDown != nowFaceDown) {
             // Placing the phone face down is a deliberate action, like turning the screen off, so it
             // may open a new bounded ambient window. Leaving the gate never arms anything.
@@ -1816,14 +1880,17 @@ class Store private constructor(private val app: Context) {
      * [armOnRelease] is for the screen going off: that is the moment the user wants the array back, so
      * it starts a fresh auto-off window. The duty-cycle guard still bounds the total.
      */
-    fun refreshSuppression(armOnRelease: Boolean = false) {
+    fun refreshSuppression(armOnRelease: Boolean = false): Boolean {
         val was = _suppression.value
         val now = suppressionNow()
-        if (was != now) {
+        val nowDim = dimFactor()
+        if (was != now || (lastPushedDimFactor >= 0f && lastPushedDimFactor != nowDim)) {
             _suppression.value = now
             pushCurrent(arm = armOnRelease && now == null)
             HiLightTile.refresh(app)
+            return true
         }
+        return false
     }
 
     private fun send(
@@ -2007,14 +2074,21 @@ class Store private constructor(private val app: Context) {
             return
         }
         val revision = ++stateRevision
+        val dim = dimFactor()
+        lastPushedDimFactor = dim
+        val bridgeTarget = activeStatus.rendererInstanceId.takeIf {
+            (active.transport == Transport.ADB || active.transport == Transport.ROOT) &&
+                isSafeBridgeVisibleTarget(active.transport, activeStatus)
+        }
         val json = Bridge.stateJson(
             rendererEnabled,
-            _priority.value, _ambient.value, alert, _ambientTimeoutMs.value, arm, dimFactor(),
+            _priority.value, _ambient.value, alert, _ambientTimeoutMs.value, arm, dim,
             privacyRules = _privacyRules.value,
             privacyObserverEnabled = privacyAllowed,
             privacyOutputEnabled = privacyAllowed,
             stateRevision = revision,
             manualBlackClearRequestId = effectiveManualRequestId,
+            bridgeRendererInstanceId = bridgeTarget,
         )
         pushUsingStatus(active, activeStatus, json)
         if ((active.transport == Transport.ADB || active.transport == Transport.ROOT) &&
@@ -3311,6 +3385,7 @@ class Store private constructor(private val app: Context) {
 
     companion object {
         private const val TAG = "HiLightStore"
+        private const val OWNER_FLASHLIGHT = "flashlight"
 
         /** How many peeks the inspector keeps — enough to cover the last minute of a busy phone. */
         private const val MAX_PEEKS = 30

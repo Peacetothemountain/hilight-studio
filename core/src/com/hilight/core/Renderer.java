@@ -146,7 +146,8 @@ public final class Renderer {
                         posFraction = (double) (n - 1 - i) / n;
                     } else if ("bilateral".equals(dir)) {
                         double distFromCenter = Math.abs(i - (n - 1.0) / 2.0);
-                        posFraction = distFromCenter / ((n - 1.0) / 2.0);
+                        double halfSpan = (n - 1.0) / 2.0;
+                        posFraction = halfSpan <= 0.0 ? 0.0 : distFromCenter / halfSpan;
                     } else {
                         posFraction = (double) i / n;
                     }
@@ -325,7 +326,7 @@ public final class Renderer {
 
     // ------------------------------------------------------------------------------ colour maths
 
-    static double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+    static double clamp01(double v) { return Double.isNaN(v) || v < 0 ? 0 : v > 1 ? 1 : v; }
 
     static int scale(int color, double k) {
         k = clamp01(k);

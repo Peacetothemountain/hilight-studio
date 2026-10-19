@@ -25,8 +25,13 @@ import java.util.List;
  */
 public final class HiLightUserService extends IHiLightService.Stub {
 
+    private static final int MAX_STATE_JSON_CHARS = 262_144;
+    private static final int ROOT_UID = 0;
+    private static final int FIRST_APPLICATION_UID = 10_000;
+
     private final Engine engine = new Engine();
     private final boolean engineReady;
+    private volatile int boundClientUid = -1;
 
     /** Shizuku instantiates the service with a no-arg constructor. */
     public HiLightUserService() {
@@ -44,16 +49,51 @@ public final class HiLightUserService extends IHiLightService.Stub {
         engineReady = ready;
     }
 
+    private boolean isCallerAuthorized() {
+        int callingUid;
+        try {
+            callingUid = android.os.Binder.getCallingUid();
+        } catch (RuntimeException ignored) {
+            return true;
+        }
+        if (callingUid == ROOT_UID || callingUid == SHELL_UID) return true;
+        try {
+            if (callingUid == android.os.Process.myUid()) return true;
+        } catch (RuntimeException ignored) {
+        }
+        if (callingUid < FIRST_APPLICATION_UID) return false;
+        int current = boundClientUid;
+        if (current == -1) {
+            synchronized (this) {
+                if (boundClientUid == -1) {
+                    boundClientUid = callingUid;
+                    return true;
+                }
+                current = boundClientUid;
+            }
+        }
+        return callingUid == current;
+    }
+
     @Override
     public void setState(String json) {
+        if (!isCallerAuthorized()) {
+            Log.w("rejected setState from unauthorized caller uid");
+            return;
+        }
+        if (json == null || json.length() > MAX_STATE_JSON_CHARS) {
+            Log.w("rejected invalid or oversized state json");
+            return;
+        }
         engine.setState(json);
     }
 
     @Override
     public String status() {
-        String raw = engine.status();
+        if (!isCallerAuthorized()) return "{}";
+        JSONObject status = engine.statusJson();
         try {
-            return new JSONObject(raw)
+            return status
                     .put("rendererVersionCode", BuildConfig.VERSION_CODE)
                     .put("rendererVersionName", BuildConfig.VERSION_NAME)
                     .put("rendererContractVersion", RendererContract.CONTRACT_VERSION)
@@ -68,17 +108,19 @@ public final class HiLightUserService extends IHiLightService.Stub {
                     .put("rendererReady", engineReady)
                     .toString();
         } catch (Exception ignored) {
-            return raw;
+            return status.toString();
         }
     }
 
     @Override
     public int ledCount() {
+        if (!isCallerAuthorized()) return 0;
         return engine.ledCount();
     }
 
     @Override
     public boolean stopAdbRenderers(int expectedPid, String expectedRendererInstanceId) {
+        if (!isCallerAuthorized()) return false;
         boolean legacy = expectedRendererInstanceId != null
                 && expectedRendererInstanceId.isEmpty();
         if (expectedPid <= 0 || (!legacy && !validInstanceId(expectedRendererInstanceId))) {
@@ -157,6 +199,7 @@ public final class HiLightUserService extends IHiLightService.Stub {
 
     @Override
     public void destroy() {
+        if (!isCallerAuthorized()) return;
         Log.i("Shizuku user service going away");
         stopThenExit(() -> {
             try {
@@ -164,7 +207,17 @@ public final class HiLightUserService extends IHiLightService.Stub {
             } catch (Throwable t) {
                 Log.w("engine stop failed during service destroy: " + t);
             }
-        }, () -> System.exit(0));
+        }, () -> {
+            Thread exitThread = new Thread(() -> {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                }
+                System.exit(0);
+            }, "hilight-service-exit");
+            exitThread.setDaemon(true);
+            exitThread.start();
+        });
     }
 
     /** Package-visible so the mandatory finally behavior can be covered without exiting the JVM. */

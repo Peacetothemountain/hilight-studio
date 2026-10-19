@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -73,7 +74,7 @@ fun NotificationInspectorDialog(store: Store, onDismiss: () -> Unit) {
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                PixelCard(tone = 3) {
+                PixelCard(modifier = Modifier.padding(horizontal = 0.dp), tone = 3) {
                     Caption(privacyNote)
                     if (peeks.isNotEmpty()) {
                         Caption(
@@ -99,7 +100,7 @@ fun NotificationInspectorDialog(store: Store, onDismiss: () -> Unit) {
                 }
 
                 if (peeks.isEmpty()) {
-                    PixelCard(tone = 3) {
+                    PixelCard(modifier = Modifier.padding(horizontal = 0.dp), tone = 3) {
                         SectionTitle(stringResource(R.string.inspector_empty_title))
                         Caption(stringResource(R.string.inspector_empty_body))
                         Caption(stringResource(R.string.inspector_empty_access))
@@ -120,7 +121,7 @@ fun NotificationInspectorDialog(store: Store, onDismiss: () -> Unit) {
 @Composable
 private fun PeekCard(peek: MessageInfo) {
     val name = peek.displayName
-    PixelCard(tone = 3) {
+    PixelCard(modifier = Modifier.padding(horizontal = 0.dp), tone = 3) {
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

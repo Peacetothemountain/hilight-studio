@@ -20,7 +20,9 @@ object Bridge {
     private const val TAG = "HiLightBridge"
     const val DIR_NAME = "hilight"
     const val DEVICE_DIR = "/storage/emulated/0/Android/data/com.hilight.studio/files/hilight"
+    private const val MAX_STATUS_BYTES = 32 * 1024L
     private val statusCache = BridgeStatusCache()
+    private val lastAlertId = java.util.concurrent.atomic.AtomicLong(0L)
 
     private fun dir(ctx: Context): File =
         File(ctx.getExternalFilesDir(null), DIR_NAME).apply { if (!exists()) mkdirs() }
@@ -60,6 +62,8 @@ object Bridge {
         stateRevision: Long = 0,
         /** Opaque one-shot id; absent from every ordinary renderer document. */
         manualBlackClearRequestId: Long? = null,
+        /** Optional exact file-bridge renderer target; omitted when null or invalid. */
+        bridgeRendererInstanceId: String? = null,
     ): String =
         JSONObject().apply {
             put("v", 2)
@@ -78,6 +82,9 @@ object Bridge {
             if (alert != null) put("alert", alert)
             if (manualBlackClearRequestId != null) {
                 put("manualBlackClearRequestId", manualBlackClearRequestId)
+            }
+            if (bridgeRendererInstanceId != null && BridgeStatusCache.validInstanceId(bridgeRendererInstanceId)) {
+                put("bridgeRendererInstanceId", bridgeRendererInstanceId)
             }
         }.toString()
 
@@ -125,6 +132,7 @@ object Bridge {
      */
     fun targetRenderer(json: String, rendererInstanceId: String): String {
         if (!BridgeStatusCache.validInstanceId(rendererInstanceId)) return json
+        if (stateTargetsRenderer(json, rendererInstanceId)) return json
         return runCatching {
             JSONObject(json).put("bridgeRendererInstanceId", rendererInstanceId).toString()
         }.getOrDefault(json)
@@ -143,7 +151,9 @@ object Bridge {
 
     fun readStatus(ctx: Context): HelperStatus {
         val f = statusFile(ctx)
-        val raw = runCatching { f.takeIf(File::exists)?.readText() }
+        val raw = runCatching {
+            f.takeIf { it.exists() && it.length() <= MAX_STATUS_BYTES }?.readText()
+        }
             .onFailure { Log.w(TAG, "unreadable status", it) }
             .getOrNull()
         return statusCache.read(raw, System.currentTimeMillis(), SystemClock.elapsedRealtime())
@@ -467,6 +477,9 @@ object Bridge {
             put("direction", direction.key)
         }
 
-    /** Monotonic-ish alert ids so the renderer can tell a new alert from a re-push. */
-    fun nextAlertId(): Long = SystemClock.elapsedRealtime()
+    /** Strictly monotonic alert ids so the renderer can tell a new alert from a re-push. */
+    fun nextAlertId(): Long {
+        val now = SystemClock.elapsedRealtime()
+        return lastAlertId.updateAndGet { prev -> if (now > prev) now else prev + 1L }
+    }
 }

@@ -133,6 +133,7 @@ public final class Engine {
         this.safety = safety;
         privacyWatcher = new AppOpsWatcher(active -> {
             synchronized (lock) {
+                if (stopped || !state.optBoolean("privacyObserverEnabled", false)) return;
                 privacyScheduler.updateActive(active, elapsedRealtimeClock.nowMs());
             }
         });
@@ -193,6 +194,9 @@ public final class Engine {
             if (stopped) return;
             stopped = true;
             running = false;
+            if (thread != null && thread != Thread.currentThread()) {
+                thread.interrupt();
+            }
             privacyWatcher.stop();
             // A stop is an explicit retry even if a prior release was accepted by the framework but
             // the physical panel stayed latched.
@@ -269,12 +273,15 @@ public final class Engine {
             }
             JSONObject a = o.optJSONObject("alert");
             if (a == null) {
+                boolean hadAlert = alert != null || gate.isAlertHeld();
                 if (alert != null) Log.i("alert cleared");
                 alert = null;
                 alertId = -1;
-                // clears the blank latch too, so a cancelled alert cannot leave the array lit
-                gate.clearAlert();
-                renderer.reset();
+                if (hadAlert) {
+                    // clears the blank latch too, so a cancelled alert cannot leave the array lit
+                    gate.clearAlert();
+                    renderer.reset();
+                }
             } else {
                 long id = a.optLong("id", -1);
                 if (id != alertId) {
@@ -294,7 +301,7 @@ public final class Engine {
         }
     }
 
-    public String status() {
+    public JSONObject statusJson() {
         JSONObject o = new JSONObject();
         try {
             synchronized (lock) {
@@ -351,7 +358,11 @@ public final class Engine {
             // a status document is never worth crashing over
             Log.w("status construction failed: " + e);
         }
-        return o.toString();
+        return o;
+    }
+
+    public String status() {
+        return statusJson().toString();
     }
 
     private void loop() {
@@ -415,6 +426,7 @@ public final class Engine {
 
             if (lastFrameWasAlert && layer != OutputGate.Layer.ALERT) {
                 alert = null;
+                alertId = -1;
                 renderer.reset();
                 // deliberately no re-arm here: an alert must not extend the ambient window
             }
@@ -444,6 +456,10 @@ public final class Engine {
                 if (cfg == null) {
                     renderingPrivacy = false;
                     renderedPrivacyRule = null;
+                    blankAndRelease(
+                            elapsedRealtime,
+                            "missing privacy config — released HiLight to the system"
+                    );
                     return;
                 }
                 if (!renderingPrivacy || !privacy.ruleId.equals(renderedPrivacyRule)) renderer.reset();

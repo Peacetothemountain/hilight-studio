@@ -9,6 +9,10 @@ internal object RuleBackup {
     const val MAX_BYTES = 1_048_576
     const val MAX_RULES = 500
     private const val VERSION = 1
+    private val PACKAGE_REGEX = Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*")
+    private val TRIGGER_NAMES = Trigger.entries.map { it.name }.toSet()
+    private val PATTERN_KEYS = Pattern.entries.map { it.key }.toSet()
+    private val DIRECTION_KEYS = Direction.entries.map { it.key }.toSet()
 
     data class MergeResult(val rules: List<AppRule>, val added: Int, val skipped: Int)
 
@@ -41,6 +45,8 @@ internal object RuleBackup {
             return rules
         } catch (failure: Exception) {
             throw IllegalArgumentException("Invalid or unsupported rule backup. No rules were changed.", failure)
+        } catch (failure: StackOverflowError) {
+            throw IllegalArgumentException("Invalid or unsupported rule backup. No rules were changed.", failure)
         }
     }
 
@@ -64,8 +70,9 @@ internal object RuleBackup {
         optionalString(o, "conversationKey", 4096)
         optionalString(o, "conversationName", 4096)
         optionalString(o, "stableId", 4608)?.let { require(it.isNotBlank()) }
-        require(string(o, "trigger", 32) in Trigger.entries.map { it.name })
+        require(string(o, "trigger", 32) in TRIGGER_NAMES)
         pattern(o)
+        if (o.has("direction")) direction(o)
         booleans(o, "enabled", "randomColor", "onlyWhenScreenOff", "onlyWhenFaceDown",
             "includeGroups", "conversationIsGroup", "ignoreSilent", "repeatWhilePending")
         if (o.has("useAppColor")) booleans(o, "useAppColor")
@@ -74,7 +81,10 @@ internal object RuleBackup {
         number(o, "speedMs", 100.0, 10_000.0)
         number(o, "brightness", 0.0, 1.0, integer = false)
         number(o, "repeatIntervalMs", 5_000.0, 60_000.0)
-        if (o.has("repeatPulseMs")) number(o, "repeatPulseMs", 1_000.0, 3_000.0)
+        if (o.has("repeatPulseMs")) {
+            number(o, "repeatPulseMs", 1_000.0, 3_000.0)
+            require(o.getLong("repeatIntervalMs") >= o.getLong("repeatPulseMs") * 5L)
+        }
         val excluded = o.getJSONArray("excludedPackages")
         require(excluded.length() <= MAX_RULES)
         repeat(excluded.length()) { i ->
@@ -86,6 +96,7 @@ internal object RuleBackup {
 
     private fun validateLook(o: JSONObject) {
         pattern(o)
+        if (o.has("direction")) direction(o)
         number(o, "color", 0.0, 4294967295.0)
         number(o, "secondColor", 0.0, 4294967295.0)
         val leds = o.getJSONArray("perLed")
@@ -100,10 +111,14 @@ internal object RuleBackup {
     }
 
     private fun pattern(o: JSONObject) {
-        require(string(o, "pattern", 32) in Pattern.entries.map { it.key })
+        require(string(o, "pattern", 32) in PATTERN_KEYS)
     }
 
-    private fun isPackage(value: String) = value.matches(Regex("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*"))
+    private fun direction(o: JSONObject) {
+        require(string(o, "direction", 32) in DIRECTION_KEYS)
+    }
+
+    private fun isPackage(value: String) = PACKAGE_REGEX.matches(value)
 
     private fun string(o: JSONObject, key: String, max: Int): String {
         val value = o.get(key)

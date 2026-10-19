@@ -87,7 +87,7 @@ public final class LightsBackend {
     private SessionIo io;
     private final Clock clock;
     private final ForcedBlackClear.Sleeper sleeper;
-    private int[] ids = new int[0];
+    private volatile int[] ids = new int[0];
     private boolean sessionOpen;
     private int sessionPriority = Integer.MIN_VALUE;
     private long minUpdatePeriodMs = Engine.FRAME_MS;
@@ -177,8 +177,18 @@ public final class LightsBackend {
         }
         Method getLightState = maybeGetLightState;
 
+        final LightState canonicalBlackState = new LightState.Builder()
+                .setColor(ForcedBlackClear.CANONICAL_COLOR)
+                .build();
+        final LightState retryBlackState = new LightState.Builder()
+                .setColor(ForcedBlackClear.RETRY_COLOR)
+                .build();
+
         io = new SessionIo() {
             private IBinder token;
+            private LightState[] cachedStates;
+            private int[] cachedColors;
+            private boolean lastFrameVisible;
 
             @Override
             public boolean open(int priority) throws Exception {
@@ -186,6 +196,9 @@ public final class LightsBackend {
                 IBinder freshToken = new Binder();
                 openSession.invoke(service, freshToken, priority);
                 token = freshToken;
+                cachedStates = null;
+                cachedColors = null;
+                lastFrameVisible = false;
                 return true;
             }
 
@@ -194,19 +207,40 @@ public final class LightsBackend {
                 if (token == null) return true;
                 closeSession.invoke(service, token);
                 token = null;
+                cachedStates = null;
+                cachedColors = null;
+                lastFrameVisible = false;
                 return true;
             }
 
             @Override
             public boolean set(int[] lightIds, int[] colors) throws Exception {
                 if (token == null) return false;
-                LightState[] states = new LightState[lightIds.length];
-                for (int i = 0; i < lightIds.length; i++) {
-                    states[i] = new LightState.Builder()
-                            .setColor(colors[i % colors.length])
-                            .build();
+                boolean visible = FrameVisibility.isVisible(colors);
+                if (cachedStates == null || cachedStates.length != lightIds.length) {
+                    cachedStates = new LightState[lightIds.length];
+                    cachedColors = new int[lightIds.length];
+                    lastFrameVisible = false;
                 }
-                setLightStates.invoke(service, token, lightIds, states);
+                boolean changed = !visible || !lastFrameVisible;
+                for (int i = 0; i < lightIds.length; i++) {
+                    int c = colors[i % colors.length];
+                    if (cachedStates[i] == null || cachedColors[i] != c) {
+                        cachedColors[i] = c;
+                        if (c == ForcedBlackClear.CANONICAL_COLOR) {
+                            cachedStates[i] = canonicalBlackState;
+                        } else if (c == ForcedBlackClear.RETRY_COLOR) {
+                            cachedStates[i] = retryBlackState;
+                        } else {
+                            cachedStates[i] = new LightState.Builder().setColor(c).build();
+                        }
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    setLightStates.invoke(service, token, lightIds, cachedStates);
+                }
+                lastFrameVisible = visible;
                 return true;
             }
 

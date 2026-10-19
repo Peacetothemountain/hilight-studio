@@ -174,12 +174,14 @@ fun AppRulesScreen(store: Store) {
     }
 
     val startWholeAppRule: (InstalledApp) -> Unit = { app ->
-        val brandColor = BrandColors.detectColor(ctx, app.pkg)
-        val draft = nextWholeAppRule(app.pkg, app.label, rules, brandColor)
-        if (draft == null) {
-            Toast.makeText(ctx, R.string.rules_both_triggers_exist, Toast.LENGTH_SHORT).show()
-        } else {
-            editing = RuleEditorState(draft, isNew = true)
+        scope.launch {
+            val brandColor = withContext(Dispatchers.IO) { BrandColors.detectColor(ctx, app.pkg) }
+            val draft = nextWholeAppRule(app.pkg, app.label, rules, brandColor)
+            if (draft == null) {
+                Toast.makeText(ctx, R.string.rules_both_triggers_exist, Toast.LENGTH_SHORT).show()
+            } else {
+                editing = RuleEditorState(draft, isNew = true)
+            }
         }
     }
 
@@ -224,7 +226,8 @@ fun AppRulesScreen(store: Store) {
     }
 
     // Preserve the existing cards and editors; only apps with several rules need a group header.
-    rules.groupBy { it.pkg }.forEach { (pkg, group) ->
+    val groupedRules = remember(rules) { rules.groupBy { it.pkg } }
+    groupedRules.forEach { (pkg, group) ->
         key(pkg) {
             var expanded by remember { mutableStateOf(true) }
             if (group.size > 1) {
@@ -342,21 +345,23 @@ fun AppRulesScreen(store: Store) {
             onDismiss = { pickingChatIn = null },
             onPicked = { ref ->
                 pickingChatIn = null
-                // The label stays the app's own and the chat travels beside it: the card shows the
-                // app as an overline above the chat, and the matcher needs the two kept apart.
-                val brandColor = BrandColors.detectColor(ctx, app.pkg)
-                val fresh = AppRule(
-                    pkg = app.pkg,
-                    label = app.label,
-                    conversationKey = ref.key,
-                    conversationName = ref.name,
-                    conversationIsGroup = ref.isGroup,
-                    color = brandColor,
-                )
-                // A chat that already has a rule opens that rule instead of a blank one. Both share
-                // an id, so saving the blank one would overwrite the colour already chosen for them.
-                val stored = rules.firstOrNull { it.pkg == fresh.pkg && it.trigger == fresh.trigger && it.conversationKey == fresh.conversationKey && it.conversationName == fresh.conversationName }
-                editing = RuleEditorState(stored ?: fresh.copy(stableId = java.util.UUID.randomUUID().toString()), isNew = stored == null)
+                scope.launch {
+                    // The label stays the app's own and the chat travels beside it: the card shows the
+                    // app as an overline above the chat, and the matcher needs the two kept apart.
+                    val brandColor = withContext(Dispatchers.IO) { BrandColors.detectColor(ctx, app.pkg) }
+                    val fresh = AppRule(
+                        pkg = app.pkg,
+                        label = app.label,
+                        conversationKey = ref.key,
+                        conversationName = ref.name,
+                        conversationIsGroup = ref.isGroup,
+                        color = brandColor,
+                    )
+                    // A chat that already has a rule opens that rule instead of a blank one. Both share
+                    // an id, so saving the blank one would overwrite the colour already chosen for them.
+                    val stored = rules.firstOrNull { it.pkg == fresh.pkg && it.trigger == fresh.trigger && it.conversationKey == fresh.conversationKey && it.conversationName == fresh.conversationName }
+                    editing = RuleEditorState(stored ?: fresh.copy(stableId = java.util.UUID.randomUUID().toString()), isNew = stored == null)
+                }
             },
         )
     }
@@ -670,7 +675,9 @@ fun AppPickerDialog(
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                val shown = apps.filter { it.label.contains(query, ignoreCase = true) }
+                val shown = remember(apps, query) {
+                    apps.filter { it.label.contains(query, ignoreCase = true) }
+                }
                 LazyColumn(Modifier.heightIn(max = 380.dp)) {
                     // a rule that covers every app without one of its own
                     if (excludePackage != AppRule.ANY_APP) {
@@ -714,6 +721,8 @@ fun AppPickerDialog(
     )
 }
 
+private val appIconCache = android.util.LruCache<String, ImageBitmap>(128)
+
 @Composable
 fun AppPackageIcon(
     pkg: String,
@@ -737,11 +746,17 @@ fun AppPackageIcon(
         return
     }
 
-    val bmp by produceState<ImageBitmap?>(null, pkg) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                ctx.packageManager.getApplicationIcon(pkg).toBitmap(80, 80).asImageBitmap()
-            }.getOrNull()
+    val bmp by produceState<ImageBitmap?>(initialValue = appIconCache.get(pkg), key1 = pkg) {
+        if (value == null) {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching {
+                    ctx.packageManager.getApplicationIcon(pkg).toBitmap(80, 80).asImageBitmap()
+                }.getOrNull()
+            }
+            if (loaded != null) {
+                appIconCache.put(pkg, loaded)
+            }
+            value = loaded
         }
     }
     Box(
@@ -857,6 +872,7 @@ private fun RuleEditorDialog(
                 LedStrip(
                     r.pattern,
                     previewRule.effectiveLook(),
+                    active = r.enabled,
                     heightDp = 38,
                 )
 
@@ -887,9 +903,12 @@ private fun RuleEditorDialog(
                 TextButton(onClick = { pickingPreset = true }, modifier = Modifier.fillMaxWidth()) {
                     ButtonLabel(stringResource(R.string.rules_use_saved_look))
                 }
+                val rulePatternOptions = remember {
+                    Pattern.entries.filter { it != Pattern.OFF && it != Pattern.CUSTOM }
+                }
                 PatternCarousel(
                     selected = r.pattern,
-                    options = Pattern.entries.filter { it != Pattern.OFF && it != Pattern.CUSTOM },
+                    options = rulePatternOptions,
                     onSelect = { r = r.copy(pattern = it) },
                 )
 
@@ -952,14 +971,21 @@ private fun RuleEditorDialog(
                             ButtonLabel(stringResource(R.string.rules_exclude_app))
                         }
                         Caption(stringResource(R.string.rules_exclude_app_hint))
-                        r.excludedPackages.sorted().forEach { pkg ->
-                            val label = remember(pkg) {
-                                runCatching {
-                                    ctx.packageManager.getApplicationLabel(
-                                        ctx.packageManager.getApplicationInfo(pkg, 0)
-                                    ).toString()
-                                }.getOrDefault(pkg)
+                        val excludedLabels by produceState<List<Pair<String, String>>>(
+                            initialValue = emptyList(),
+                            key1 = r.excludedPackages,
+                        ) {
+                            value = withContext(Dispatchers.IO) {
+                                val pm = ctx.packageManager
+                                r.excludedPackages.sorted().map { pkg ->
+                                    val label = runCatching {
+                                        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                                    }.getOrDefault(pkg)
+                                    pkg to label
+                                }
                             }
+                        }
+                        excludedLabels.forEach { (pkg, label) ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(label, modifier = Modifier.weight(1f))
                                 TextButton(onClick = {

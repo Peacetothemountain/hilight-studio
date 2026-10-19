@@ -69,6 +69,14 @@ import kotlin.math.roundToInt
 class TileDialogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val action = intent?.action
+        if (action != null &&
+            action != android.service.quicksettings.TileService.ACTION_QS_TILE_PREFERENCES &&
+            action != android.content.Intent.ACTION_MAIN
+        ) {
+            finish()
+            return
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.setDimAmount(0.68f)
         if (Build.VERSION.SDK_INT >= 31) {

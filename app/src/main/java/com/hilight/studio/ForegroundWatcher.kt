@@ -6,12 +6,15 @@ import android.app.NotificationManager
 import android.app.AppOpsManager
 import android.app.Service
 import android.app.usage.UsageStatsManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
@@ -35,7 +38,27 @@ class ForegroundWatcher : Service() {
     private var queriedThroughMs = Long.MIN_VALUE
     @Volatile private var forceRefresh = true
     @Volatile private var plan = ForegroundWatchPlan(false, false)
+    @Volatile private var screenInteractive = true
     private lateinit var faceDownTracker: FaceDownSensorTracker
+
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    screenInteractive = false
+                    if (::handler.isInitialized) handler.removeCallbacks(tick)
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    screenInteractive = true
+                    if (plan.trackForegroundApps && ::handler.isInitialized) {
+                        forceRefresh = true
+                        handler.removeCallbacks(tick)
+                        handler.post(tick)
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * Set on the main thread when the service is going away.
@@ -49,7 +72,7 @@ class ForegroundWatcher : Service() {
 
     private val tick = object : Runnable {
         override fun run() {
-            if (!plan.trackForegroundApps) return
+            if (!plan.trackForegroundApps || !screenInteractive) return
             val pkg = currentForegroundPackage()
             if (forceRefresh || pkg != lastPkg) {
                 forceRefresh = false
@@ -63,14 +86,22 @@ class ForegroundWatcher : Service() {
                     }
                 }
             }
-            if (plan.trackForegroundApps) handler.postDelayed(this, POLL_MS)
+            if (plan.trackForegroundApps && screenInteractive) handler.postDelayed(this, POLL_MS)
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        screenInteractive = getSystemService(PowerManager::class.java)?.isInteractive != false
         thread = HandlerThread("fg-watch").also { it.start() }
         handler = Handler(thread.looper)
+        registerReceiver(
+            screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            },
+        )
         faceDownTracker = FaceDownSensorTracker(this, handler) { state, sampleElapsedMs ->
             // Sensor callbacks can already be queued while the service is tearing down. Mirror the
             // foreground-app path's stopped guard so a retired watcher cannot publish late state.
@@ -83,6 +114,7 @@ class ForegroundWatcher : Service() {
 
     override fun onDestroy() {
         stopped = true
+        runCatching { unregisterReceiver(screenReceiver) }
         // The listener is registered on this looper, so unregister it before asking the thread to quit.
         faceDownTracker.stop()
         handler.removeCallbacksAndMessages(null)
@@ -113,7 +145,7 @@ class ForegroundWatcher : Service() {
         forceRefresh = true
         handler.removeCallbacks(tick)
         if (next.trackForegroundApps) {
-            handler.post(tick)
+            if (screenInteractive) handler.post(tick)
         } else if (prior.trackForegroundApps) {
             foreground.clear()
             lastPkg = null
@@ -206,7 +238,7 @@ class ForegroundWatcher : Service() {
         private const val EXTRA_FACE_DOWN = "trackFaceDown"
         private const val POLL_MS = 1000L
         private const val QUERY_OVERLAP_MS = 2_000L
-        private const val BOOTSTRAP_LOOKBACK_MS = 24 * 60 * 60_000L
+        private const val BOOTSTRAP_LOOKBACK_MS = 15 * 60_000L
 
         /** Starts or stops the watcher to match one authoritative work plan. */
         internal fun syncRunning(ctx: Context, plan: ForegroundWatchPlan): SyncResult {

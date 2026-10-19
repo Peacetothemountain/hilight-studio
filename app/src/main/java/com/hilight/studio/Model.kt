@@ -127,7 +127,11 @@ data class Ambient(
             )
             Pattern.GRADIENT -> put(
                 "colors",
-                JSONArray().put(color.toUInt().toLong()).put(secondColor.toUInt().toLong()),
+                if (perLed.size == LED_COUNT && perLed.distinct().size > 1) {
+                    JSONArray().also { a -> perLed.forEach { a.put(it.toUInt().toLong()) } }
+                } else {
+                    JSONArray().put(color.toUInt().toLong()).put(secondColor.toUInt().toLong())
+                },
             )
             else -> put("color", color.toUInt().toLong())
         }

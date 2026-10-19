@@ -41,6 +41,12 @@ final class AppOpsWatcher {
     private IBinder binder;
     private IBinder.DeathRecipient deathRecipient;
     private volatile State state = State.STOPPED;
+    private static volatile Method getPackagesForOpsMethod;
+    private static volatile Method getPackageNameMethod;
+    private static volatile Method getUidMethod;
+    private static volatile Method getOpsMethod;
+    private static volatile Method isRunningMethod;
+    private static volatile Method getOpStrMethod;
 
     AppOpsWatcher(Listener listener) {
         this.listener = listener;
@@ -121,13 +127,20 @@ final class AppOpsWatcher {
             appOps = manager;
         }
         try {
-            Method getPackages = AppOpsManager.class.getDeclaredMethod(
-                    "getPackagesForOps", String[].class);
-            getPackages.setAccessible(true);
+            Method getPackages = getPackagesForOpsMethod;
+            if (getPackages == null) {
+                getPackages = AppOpsManager.class.getDeclaredMethod(
+                        "getPackagesForOps", String[].class);
+                getPackages.setAccessible(true);
+                getPackagesForOpsMethod = getPackages;
+            }
             Object raw = getPackages.invoke(appOps, (Object) OPS);
             Set<PrivacyScheduler.Use> active = new HashSet<>();
             if (raw instanceof List<?>) {
                 for (Object packageOps : (List<?>) raw) readPackage(packageOps, active);
+            }
+            synchronized (lock) {
+                if (!desired) return;
             }
             listener.onSnapshot(Collections.unmodifiableSet(active));
         } catch (Throwable t) {
@@ -137,24 +150,49 @@ final class AppOpsWatcher {
 
     private static void readPackage(Object packageOps, Set<PrivacyScheduler.Use> out) throws Exception {
         Class<?> type = packageOps.getClass();
-        String pkg = (String) invoke(type, packageOps, "getPackageName");
-        int uid = (Integer) invoke(type, packageOps, "getUid");
-        Object entries = invoke(type, packageOps, "getOps");
+        Method pkgMethod = getPackageNameMethod;
+        if (pkgMethod == null) {
+            pkgMethod = cachedMethod(type, "getPackageName");
+            getPackageNameMethod = pkgMethod;
+        }
+        Method uidMethod = getUidMethod;
+        if (uidMethod == null) {
+            uidMethod = cachedMethod(type, "getUid");
+            getUidMethod = uidMethod;
+        }
+        Method opsMethod = getOpsMethod;
+        if (opsMethod == null) {
+            opsMethod = cachedMethod(type, "getOps");
+            getOpsMethod = opsMethod;
+        }
+        String pkg = (String) pkgMethod.invoke(packageOps);
+        int uid = (Integer) uidMethod.invoke(packageOps);
+        Object entries = opsMethod.invoke(packageOps);
         if (!(entries instanceof List<?>)) return;
         for (Object entry : (List<?>) entries) {
             Class<?> entryType = entry.getClass();
-            boolean running = (Boolean) invoke(entryType, entry, "isRunning");
+            Method runningMethod = isRunningMethod;
+            if (runningMethod == null) {
+                runningMethod = cachedMethod(entryType, "isRunning");
+                isRunningMethod = runningMethod;
+            }
+            boolean running = (Boolean) runningMethod.invoke(entry);
             if (!running) continue;
-            String op = (String) invoke(entryType, entry, "getOpStr");
+            Method opStrMethod = getOpStrMethod;
+            if (opStrMethod == null) {
+                opStrMethod = cachedMethod(entryType, "getOpStr");
+                getOpStrMethod = opStrMethod;
+            }
+            String op = (String) opStrMethod.invoke(entry);
             PrivacyScheduler.Activity activity = activity(op);
             if (activity != null) out.add(new PrivacyScheduler.Use(activity, uid, pkg));
         }
     }
 
-    private static Object invoke(Class<?> type, Object receiver, String name) throws Exception {
+    private static Method cachedMethod(Class<?> type, String name) throws Exception {
         Method method = type.getMethod(name);
         method.setAccessible(true);
-        return method.invoke(receiver);
+        return method;
     }
 
     private static PrivacyScheduler.Activity activity(String op) {

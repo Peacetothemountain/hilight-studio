@@ -1,9 +1,14 @@
 package com.hilight.studio
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,21 +18,20 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -38,30 +42,32 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.roundToInt
 
 val PRESET_COLORS = listOf(
     0xFFFF1744, 0xFFFF6D00, 0xFFFFD600, 0xFF00E676, 0xFF00E5FF,
@@ -108,10 +114,8 @@ internal fun rememberPreviewLauncher(store: Store): PreviewLauncher {
 }
 
 /**
- * Swatches plus hue / saturation / intensity.
- *
- * The selected swatch grows on a spring and keeps a ring, the way Pixel's wallpaper and theme
- * pickers behave, and the hue track is the gradient itself rather than a tinted bar.
+ * Swatches plus hue / saturation / intensity, enhanced with Material 3 Expressive
+ * Color Spectrum Wheel launcher, Planckian Kelvin CCT quick presets, and live Hex pill.
  */
 @Composable
 fun ColorPicker(
@@ -121,8 +125,27 @@ fun ColorPicker(
     // read from resources, which a composable default expression is allowed to do.
     label: String = stringResource(R.string.widget_colour),
 ) {
-    val hsv = FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) }
-    val haptics = LocalHapticFeedback.current
+    val hsv = remember(color) {
+        FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) }
+    }
+    val view = LocalView.current
+    var showWheelDialog by remember { mutableStateOf(false) }
+    var showCctRow by remember { mutableStateOf(false) }
+    var selectedKelvin by remember { mutableIntStateOf(4000) }
+    val hueBrush = remember {
+        Brush.horizontalGradient((0..6).map { Color(Renderer.hsv(it * 60f)) })
+    }
+    val cctBrush = remember {
+        Brush.horizontalGradient(
+            listOf(
+                Color(TileDialogActivity.kelvinToRgb(2000)),
+                Color(TileDialogActivity.kelvinToRgb(3000)),
+                Color(TileDialogActivity.kelvinToRgb(4000)),
+                Color(TileDialogActivity.kelvinToRgb(5500)),
+                Color(TileDialogActivity.kelvinToRgb(7000)),
+            )
+        )
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
@@ -130,13 +153,166 @@ fun ColorPicker(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
-            Box(
-                Modifier
-                    .size(30.dp)
-                    .background(Color(color), CircleShape)
-                    .border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f, fill = false),
             )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // 1. Color Wheel Dialog Chip
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                            CircleShape,
+                        )
+                        .clickable(role = Role.Button) {
+                            PixelHaptics.click(view)
+                            showWheelDialog = true
+                        }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        Icons.Rounded.ColorLens,
+                        contentDescription = null,
+                        tint = Color(color),
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Text(
+                        "Wheel",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+
+                // 2. Kelvin CCT Temperature Toggle Chip
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(
+                            if (showCctRow) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainerHighest
+                        )
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                            CircleShape,
+                        )
+                        .clickable(role = Role.Button) {
+                            PixelHaptics.click(view)
+                            showCctRow = !showCctRow
+                        }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        Icons.Rounded.WbSunny,
+                        contentDescription = null,
+                        tint = if (showCctRow) MaterialTheme.colorScheme.onSecondaryContainer else Color(0xFFFFD54F),
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Text(
+                        "CCT",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (showCctRow) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+
+                // 3. Compact Hex / Swatch Badge
+                HexColorPill(
+                    color = color,
+                    onColorChanged = onColor,
+                )
+            }
+        }
+
+        // Expandable Kelvin CCT Quick Presets & Blackbody Strip
+        AnimatedVisibility(
+            visible = showCctRow,
+            enter = fadeIn() + expandVertically(spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow)),
+            exit = fadeOut() + shrinkVertically(spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow)),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                        MaterialTheme.shapes.medium,
+                    )
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf(2700 to "2700K", 4000 to "4000K", 5500 to "5500K", 6500 to "6500K").forEach { (k, kLabel) ->
+                        val kColor = TileDialogActivity.kelvinToRgb(k)
+                        val isSelected = selectedKelvin == k && color == kColor
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
+                                .clickable(role = Role.Button) {
+                                    PixelHaptics.click(view)
+                                    selectedKelvin = k
+                                    onColor(kColor)
+                                }
+                                .padding(vertical = 6.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = kLabel,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color(kColor),
+                            )
+                        }
+                    }
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(34.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(16.dp)
+                            .padding(horizontal = 6.dp)
+                            .background(cctBrush, CircleShape)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), CircleShape)
+                    )
+                    Slider(
+                        value = selectedKelvin.toFloat(),
+                        valueRange = 2000f..7000f,
+                        onValueChange = { k ->
+                            selectedKelvin = k.roundToInt()
+                            onColor(TileDialogActivity.kelvinToRgb(selectedKelvin))
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color(TileDialogActivity.kelvinToRgb(selectedKelvin)),
+                            activeTrackColor = Color.Transparent,
+                            inactiveTrackColor = Color.Transparent,
+                        ),
+                    )
+                }
+            }
         }
 
         Row(
@@ -145,7 +321,6 @@ fun ColorPicker(
         ) {
             PRESET_COLORS.forEach { c ->
                 val selected = c == color
-                val view = androidx.compose.ui.platform.LocalView.current
                 val scale by animateFloatAsState(
                     if (selected) 1.16f else 1f,
                     spring(
@@ -165,7 +340,7 @@ fun ColorPicker(
                             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
                             CircleShape,
                         )
-                        .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                        .clickable(role = Role.Button) {
                             PixelHaptics.click(view)
                             onColor(c)
                         }
@@ -185,10 +360,7 @@ fun ColorPicker(
                     .fillMaxWidth()
                     .height(22.dp)
                     .padding(horizontal = 6.dp)
-                    .background(
-                        Brush.horizontalGradient((0..6).map { Color(Renderer.hsv(it * 60f)) }),
-                        CircleShape,
-                    )
+                    .background(hueBrush, CircleShape)
             )
             Slider(
                 value = hsv[0],
@@ -212,8 +384,14 @@ fun ColorPicker(
         PixelSlider(stringResource(R.string.widget_intensity), hsv[2], 0.05f..1f, { v ->
             onColor(android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], v)))
         }) { stringResource(R.string.widget_percent, (it * 100).toInt()) }
+    }
 
-
+    if (showWheelDialog) {
+        ColorSpectrumDialog(
+            initialColor = color,
+            onDismiss = { showWheelDialog = false },
+            onColorSelected = onColor,
+        )
     }
 }
 
@@ -227,18 +405,20 @@ fun ColorPicker(
 @Composable
 fun wallpaperLedColours(): List<Int> {
     val scheme = MaterialTheme.colorScheme
-    val seeds = listOf(scheme.primary, scheme.tertiary, scheme.secondary, scheme.surfaceTint)
-        .map { android.graphics.Color.valueOf(it.red, it.green, it.blue).toArgb() }
-    val hues = seeds.map { c ->
-        FloatArray(3).also { android.graphics.Color.colorToHSV(c, it) }[0]
-    }
-    return (0 until LED_COUNT).map { i ->
-        val t = i.toFloat() / LED_COUNT * hues.size
-        val a = hues[t.toInt().coerceAtMost(hues.lastIndex)]
-        val b = hues[(t.toInt() + 1) % hues.size]
-        val diff = ((b - a + 540) % 360) - 180
-        val hue = (a + diff * (t - t.toInt()) + 360) % 360
-        Renderer.hsv(hue, 1f, 1f)
+    return remember(scheme.primary, scheme.tertiary, scheme.secondary, scheme.surfaceTint) {
+        val seeds = listOf(scheme.primary, scheme.tertiary, scheme.secondary, scheme.surfaceTint)
+            .map { android.graphics.Color.valueOf(it.red, it.green, it.blue).toArgb() }
+        val hues = seeds.map { c ->
+            FloatArray(3).also { android.graphics.Color.colorToHSV(c, it) }[0]
+        }
+        (0 until LED_COUNT).map { i ->
+            val t = i.toFloat() / LED_COUNT * hues.size
+            val a = hues[t.toInt().coerceAtMost(hues.lastIndex)]
+            val b = hues[(t.toInt() + 1) % hues.size]
+            val diff = ((b - a + 540) % 360) - 180
+            val hue = (a + diff * (t - t.toInt()) + 360) % 360
+            Renderer.hsv(hue, 1f, 1f)
+        }
     }
 }
 
@@ -256,41 +436,63 @@ fun ColorSpectrumWheel(
     val hsv = remember(color) {
         FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) }
     }
-    val haptics = LocalHapticFeedback.current
+    val currentV by rememberUpdatedState(hsv[2])
+    val currentOnColorChanged by rememberUpdatedState(onColorChanged)
     val surfaceColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val outlineColor = MaterialTheme.colorScheme.outlineVariant
-
-    val view = androidx.compose.ui.platform.LocalView.current
+    val view = LocalView.current
+    val density = LocalDensity.current
+    val outerInsetPx = with(density) { 10.dp.toPx() }
+    val sweepColors = remember {
+        (0..360 step 30).map { Color(Renderer.hsv(it.toFloat(), 1f, 1f)) }
+    }
 
     Canvas(
         modifier = modifier
             .size(sizeDp.dp)
-            .pointerInput(Unit) {
+            .pointerInput(outerInsetPx) {
                 detectDragGestures(
                     onDragStart = { offset: Offset ->
                         PixelHaptics.click(view)
-                        updateColorFromOffset(offset, size.width.toFloat(), hsv[2], onColorChanged)
+                        updateColorFromOffset(
+                            offset = offset,
+                            viewSize = size.width.toFloat(),
+                            outerInsetPx = outerInsetPx,
+                            value = currentV,
+                            onColorChanged = currentOnColorChanged,
+                        )
                     },
                     onDrag = { change, _ ->
                         change.consume()
-                        updateColorFromOffset(change.position, size.width.toFloat(), hsv[2], onColorChanged)
+                        updateColorFromOffset(
+                            offset = change.position,
+                            viewSize = size.width.toFloat(),
+                            outerInsetPx = outerInsetPx,
+                            value = currentV,
+                            onColorChanged = currentOnColorChanged,
+                        )
                     }
                 )
             }
-            .pointerInput(Unit) {
+            .pointerInput(outerInsetPx) {
                 detectTapGestures { offset: Offset ->
                     PixelHaptics.click(view)
-                    updateColorFromOffset(offset, size.width.toFloat(), hsv[2], onColorChanged)
+                    updateColorFromOffset(
+                        offset = offset,
+                        viewSize = size.width.toFloat(),
+                        outerInsetPx = outerInsetPx,
+                        value = currentV,
+                        onColorChanged = currentOnColorChanged,
+                    )
                 }
             }
     ) {
         val cx = size.width / 2f
         val cy = size.height / 2f
-        val outerRadius = size.width / 2f - 10.dp.toPx()
+        val outerRadius = size.width / 2f - outerInsetPx
         val innerRadius = outerRadius * 0.48f
 
         // 1. Hue sweep gradient on the outer spectrum ring
-        val sweepColors = (0..360 step 30).map { Color(Renderer.hsv(it.toFloat(), 1f, 1f)) }
         drawCircle(
             brush = Brush.sweepGradient(sweepColors, center = Offset(cx, cy)),
             radius = outerRadius,
@@ -365,20 +567,22 @@ fun ColorSpectrumWheel(
 private fun updateColorFromOffset(
     offset: Offset,
     viewSize: Float,
+    outerInsetPx: Float,
     value: Float,
     onColorChanged: (Int) -> Unit,
 ) {
     val cx = viewSize / 2f
     val cy = viewSize / 2f
-    val radius = viewSize / 2f - 20f
+    val outerRadius = (viewSize / 2f - outerInsetPx).coerceAtLeast(1f)
+    val innerRadius = outerRadius * 0.48f
     val dx = offset.x - cx
     val dy = offset.y - cy
 
     var angleDeg = (kotlin.math.atan2(dy, dx) * 180f / Math.PI).toFloat()
     if (angleDeg < 0) angleDeg += 360f
 
-    val dist = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtMost(radius)
-    val sat = (dist / radius).coerceIn(0f, 1f)
+    val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+    val sat = ((dist - innerRadius) / (outerRadius - innerRadius).coerceAtLeast(1f)).coerceIn(0f, 1f)
     val v = if (value <= 0.05f) 1f else value
 
     val argb = android.graphics.Color.HSVToColor(floatArrayOf(angleDeg, sat, v))
@@ -398,7 +602,7 @@ fun HexColorPill(
     val hexString = "%06X".format(color and 0xFFFFFF)
     var isEditing by remember { mutableStateOf(false) }
     var textInput by remember(hexString) { mutableStateOf(hexString) }
-    val view = androidx.compose.ui.platform.LocalView.current
+    val view = LocalView.current
 
     Row(
         modifier = modifier
@@ -411,23 +615,23 @@ fun HexColorPill(
                 Color(color).copy(alpha = 0.8f),
                 CircleShape,
             )
-            .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+            .clickable(role = Role.Button) {
                 PixelHaptics.click(view)
                 isEditing = true
             }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
             Modifier
-                .size(16.dp)
+                .size(14.dp)
                 .background(Color(color), CircleShape)
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
         )
         Text(
             "#$hexString",
-            style = MaterialTheme.typography.titleMedium.copy(
+            style = MaterialTheme.typography.labelLarge.copy(
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
             ),
@@ -508,16 +712,18 @@ fun ColorSpectrumDialog(
         FloatArray(3).also { android.graphics.Color.colorToHSV(currentColor, it) }
     }
 
-    val flashlightPresets = listOf(
-        0xFFFFFFFF.toInt(), // Pure White
-        0xFFFFF4E5.toInt(), // Warm White
-        0xFFFFB300.toInt(), // Amber Flash
-        0xFFFF1744.toInt(), // Red Beacon
-        0xFF00E676.toInt(), // Emerald Green
-        0xFF00E5FF.toInt(), // Neon Cyan
-        0xFF2979FF.toInt(), // Blue Signal
-        0xFFD500F9.toInt(), // Purple Light
-    )
+    val flashlightPresets = remember {
+        listOf(
+            0xFFFFFFFF.toInt(), // Pure White
+            0xFFFFF4E5.toInt(), // Warm White
+            0xFFFFB300.toInt(), // Amber Flash
+            0xFFFF1744.toInt(), // Red Beacon
+            0xFF00E676.toInt(), // Emerald Green
+            0xFF00E5FF.toInt(), // Neon Cyan
+            0xFF2979FF.toInt(), // Blue Signal
+            0xFFD500F9.toInt(), // Purple Light
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -603,131 +809,4 @@ fun ColorSpectrumDialog(
             }
         },
     )
-}
-
-
-
-
-@Composable
-fun VerticalFlashlightSlider(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    color: Int,
-    modifier: Modifier = Modifier
-) {
-    val view = androidx.compose.ui.platform.LocalView.current
-    var isDragging by remember { mutableStateOf(false) }
-    
-    val accent = Color(color)
-    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-    
-    val animatedValue by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = value,
-        animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = 0.7f, 
-            stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
-        ),
-        label = "sliderValue"
-    )
-
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(130.dp)
-            .clip(androidx.compose.foundation.shape.CircleShape)
-            .background(trackColor)
-            .pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragStart = { isDragging = true },
-                    onDragEnd = { isDragging = false },
-                    onDragCancel = { isDragging = false }
-                ) { change, dragAmount ->
-                    change.consume()
-                    val height = size.height.toFloat()
-                    val newValue = (value - dragAmount / height).coerceIn(0f, 1f)
-                    if (newValue != value) {
-                        onValueChange(newValue)
-                    }
-                }
-            }
-            .clickable {
-                val next = if (value > 0f) 0f else 1f
-                onValueChange(next)
-                PixelHaptics.toggle(view, next > 0f)
-            },
-        contentAlignment = Alignment.BottomCenter
-    ) {
-        // Base fill layer
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(animatedValue)
-                .background(accent.copy(alpha = 0.6f))
-        )
-        
-        // Volumetric Light Beam Canvas
-        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-            val fillTop = h * (1f - animatedValue)
-            
-            // Flashlight icon is positioned at the bottom, about 48dp size + 32dp padding
-            // Center of the light emission from the icon:
-            val emitterX = w / 2f
-            val emitterY = h - 64.dp.toPx() 
-            
-            if (animatedValue > 0.02f) {
-                // Draw expanding light beam (Trapezoid)
-                val path = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(emitterX - 12.dp.toPx(), emitterY)
-                    lineTo(emitterX + 12.dp.toPx(), emitterY)
-                    // Expand outwards as it goes up
-                    val spread = 24.dp.toPx() + (w * 0.45f * animatedValue)
-                    lineTo(emitterX + spread, fillTop)
-                    lineTo(emitterX - spread, fillTop)
-                    close()
-                }
-                
-                drawPath(
-                    path = path,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.75f * animatedValue),
-                            Color.White.copy(alpha = 0.1f * animatedValue),
-                            Color.Transparent
-                        ),
-                        startY = fillTop,
-                        endY = emitterY
-                    )
-                )
-                
-                // Hotspot glow at the top of the fill
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.8f * animatedValue), Color.Transparent),
-                        center = Offset(emitterX, fillTop),
-                        radius = w * 0.8f * animatedValue
-                    ),
-                    center = Offset(emitterX, fillTop),
-                    radius = w * 0.8f * animatedValue
-                )
-            }
-        }
-        
-        // Icon at bottom
-        Box(
-            modifier = Modifier
-                .padding(bottom = 32.dp)
-                .size(64.dp)
-                .background(if (value > 0f) Color.White.copy(alpha = 0.2f) else Color.Transparent, androidx.compose.foundation.shape.CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = androidx.compose.ui.res.painterResource(R.drawable.ic_hilight_foreground),
-                contentDescription = null,
-                tint = if (value > 0f) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(36.dp)
-            )
-        }
-    }
 }

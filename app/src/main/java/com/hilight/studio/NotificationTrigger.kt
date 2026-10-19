@@ -198,7 +198,7 @@ class NotificationTrigger : NotificationListenerService() {
      */
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         runCatching {
-            val key = NotificationPeek.read(sbn).notifKey
+            val key = runCatching { sbn.key }.getOrNull().orEmpty()
             if (key.isNotEmpty()) synchronized(handled) { handled.remove(key) }
             reminders.remove(sbn.key)
             incomingCalls.remove(sbn.key)
@@ -334,10 +334,13 @@ class NotificationTrigger : NotificationListenerService() {
                 (rule.keyword.isNotBlank() && !matchesKeyword(info, rule.keyword))) {
                 reminders.remove(next.key)
                 store.cancelOwnedAlert("reminder:${next.key}")
-            } else if (SystemClock.elapsedRealtime() >= next.dueAtMs && !store.hasActiveAlert()) {
-                reminderOwner = "reminder:${next.key}"
-                fireRule(rule.copy(pattern = Pattern.PULSE, durationMs = rule.safeRepeatPulseMs, speedMs = 1000), next.key, reminderOwner!!, rule)
-                reminders.defer(next.key, SystemClock.elapsedRealtime(), rule.safeRepeatIntervalMs)
+            } else if (SystemClock.elapsedRealtime() >= next.dueAtMs) {
+                val nowElapsed = SystemClock.elapsedRealtime()
+                if (!store.hasActiveAlert()) {
+                    reminderOwner = "reminder:${next.key}"
+                    fireRule(rule.copy(pattern = Pattern.PULSE, durationMs = rule.safeRepeatPulseMs, speedMs = 1000), next.key, reminderOwner!!, rule)
+                }
+                reminders.defer(next.key, nowElapsed, rule.safeRepeatIntervalMs)
             }
         }
         scheduleTick()
@@ -349,7 +352,11 @@ class NotificationTrigger : NotificationListenerService() {
             val notification = runCatching { activeNotifications?.firstOrNull { it.key == notificationKey } }.getOrNull() ?: return@launch
             val color = AppColor.colorFor(this@NotificationTrigger, notification.packageName) ?: rule.color
             // Icon lookup never keeps a removed notification or an edited rule alive.
-            if (store.rules.value.none { it == savedRule || (it.id == savedRule.id && it.copy(conversationKey = savedRule.conversationKey) == savedRule) } ||
+            if (store.rules.value.none {
+                    it == savedRule ||
+                        (it.id == savedRule.id && it.copy(conversationKey = savedRule.conversationKey) == savedRule) ||
+                        ConversationMatch.isHealOf(it, savedRule)
+                } ||
                 runCatching { activeNotifications?.none { it.key == notificationKey } }.getOrNull() != false ||
                 (owner.startsWith("reminder:") && !locked())) return@launch
             store.fireAlert(rule.copy(color = color), owner)

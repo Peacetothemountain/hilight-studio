@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedTextField
@@ -42,13 +43,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -60,12 +64,25 @@ import androidx.compose.ui.unit.dp
 import android.widget.Toast
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
+private fun interpolateGradientLeds(startColor: Int, endColor: Int): List<Int> {
+    val start = Color(startColor)
+    val end = Color(endColor)
+    return List(LED_COUNT) { i ->
+        val k = i.toFloat() / (LED_COUNT - 1).coerceAtLeast(1)
+        val r = (start.red * (1f - k) + end.red * k).coerceIn(0f, 1f)
+        val g = (start.green * (1f - k) + end.green * k).coerceIn(0f, 1f)
+        val b = (start.blue * (1f - k) + end.blue * k).coerceIn(0f, 1f)
+        android.graphics.Color.valueOf(r, g, b).toArgb()
+    }
+}
+
 /** The always-on look: pattern, colours, timing. */
 @Composable
 fun AmbientScreen(store: Store) {
     val ambient by store.ambient.collectAsStateWithLifecycle()
     val enabled by store.enabled.collectAsStateWithLifecycle()
     var editingLed by rememberSaveable { mutableIntStateOf(0) }
+    var editingGradientStop by rememberSaveable { mutableIntStateOf(0) }
 
     PresetsCard(store)
 
@@ -190,57 +207,162 @@ fun AmbientScreen(store: Store) {
 
                 Pattern.GRADIENT -> PixelCard {
                     SectionTitle(stringResource(R.string.pattern_gradient))
-                    Caption(stringResource(R.string.style_per_led_hint))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        ambient.perLed.forEachIndexed { i, c ->
-                            LedSwatch(
-                                color = c,
-                                selected = i == editingLed,
-                                modifier = Modifier.weight(1f),
-                            ) { editingLed = i }
+                    // Live gradient preview bar between Start and End stops
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(22.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color(ambient.color), Color(ambient.secondColor))
+                                )
+                            )
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                CircleShape,
+                            )
+                    )
+                    // 2-Stop Selector (Start Color / End Color)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        listOf(
+                            0 to ("Start Color" to ambient.color),
+                            1 to ("End Color" to ambient.secondColor),
+                        ).forEach { (stopIndex, pair) ->
+                            val (stopLabel, stopColor) = pair
+                            val selected = editingGradientStop == stopIndex
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.secondaryContainer
+                                        else MaterialTheme.colorScheme.surfaceContainerHighest
+                                    )
+                                    .border(
+                                        width = if (selected) 2.dp else 1.dp,
+                                        color = if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                        shape = RoundedCornerShape(18.dp),
+                                    )
+                                    .clickable { editingGradientStop = stopIndex }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(stopColor))
+                                        .border(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                            CircleShape,
+                                        )
+                                )
+                                Column {
+                                    Text(
+                                        text = stopLabel,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                        else MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    Text(
+                                        text = String.format("#%06X", 0xFFFFFF and stopColor),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                     ColorPicker(
-                        color = ambient.perLed.getOrElse(editingLed) { ambient.color },
+                        color = if (editingGradientStop == 0) ambient.color else ambient.secondColor,
                         onColor = { c ->
+                            val newStart = if (editingGradientStop == 0) c else ambient.color
+                            val newEnd = if (editingGradientStop == 1) c else ambient.secondColor
                             store.setAmbient(
                                 ambient.copy(
-                                    perLed = ambient.perLed.toMutableList().also { it[editingLed] = c })
+                                    color = newStart,
+                                    secondColor = newEnd,
+                                    perLed = interpolateGradientLeds(newStart, newEnd),
+                                )
                             )
                         },
-                        label = stringResource(R.string.style_led_number, editingLed + 1),
+                        label = if (editingGradientStop == 0) "Start Color" else "End Color",
                     )
+                    PixelSlider(
+                        stringResource(R.string.style_rotate_around_array),
+                        ambient.rotateMs.toFloat(),
+                        0f..2000f,
+                        { store.setAmbient(ambient.copy(rotateMs = it.toInt())) },
+                    ) {
+                        if (it < 50) stringResource(R.string.style_rotate_off)
+                        else stringResource(R.string.duration_ms, it.toInt())
+                    }
                     val wallpaper = wallpaperLedColours()
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilledTonalButton(
                             onClick = {
-                                val startC = ambient.perLed.firstOrNull() ?: ambient.color
-                                val endC = ambient.perLed.lastOrNull() ?: ambient.secondColor
-                                val interpolated = List(LED_COUNT) { i ->
-                                    val k = i.toFloat() / (LED_COUNT - 1).coerceAtLeast(1)
-                                    val r = (Color(startC).red * (1 - k) + Color(endC).red * k).coerceIn(0f, 1f)
-                                    val g = (Color(startC).green * (1 - k) + Color(endC).green * k).coerceIn(0f, 1f)
-                                    val b = (Color(startC).blue * (1 - k) + Color(endC).blue * k).coerceIn(0f, 1f)
-                                    android.graphics.Color.valueOf(r, g, b).toArgb()
-                                }
-                                store.setAmbient(ambient.copy(perLed = interpolated))
+                                val s = 0xFFFF1744.toInt()
+                                val e = 0xFFFFD600.toInt()
+                                store.setAmbient(
+                                    ambient.copy(
+                                        color = s,
+                                        secondColor = e,
+                                        perLed = interpolateGradientLeds(s, e),
+                                    )
+                                )
                             },
                             modifier = Modifier.weight(1f),
-                        ) { ButtonLabel("Blend") }
+                        ) { ButtonLabel("Sunset") }
                         FilledTonalButton(
-                            onClick = { store.setAmbient(ambient.copy(perLed = wallpaper)) },
+                            onClick = {
+                                val s = 0xFF00E5FF.toInt()
+                                val e = 0xFFD500F9.toInt()
+                                store.setAmbient(
+                                    ambient.copy(
+                                        color = s,
+                                        secondColor = e,
+                                        perLed = interpolateGradientLeds(s, e),
+                                    )
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { ButtonLabel("Cyber") }
+                        FilledTonalButton(
+                            onClick = {
+                                val s = wallpaper.firstOrNull() ?: ambient.color
+                                val e = wallpaper.lastOrNull() ?: ambient.secondColor
+                                store.setAmbient(
+                                    ambient.copy(
+                                        color = s,
+                                        secondColor = e,
+                                        perLed = wallpaper,
+                                    )
+                                )
+                            },
                             modifier = Modifier.weight(1f),
                         ) { ButtonLabel(stringResource(R.string.style_wallpaper)) }
                         FilledTonalButton(
                             onClick = {
-                                val sunset = listOf(
-                                    0xFFFF1744.toInt(), 0xFFFF5252.toInt(), 0xFFFF6D00.toInt(), 0xFFFF9100.toInt(),
-                                    0xFFFFAB00.toInt(), 0xFFFFD600.toInt(), 0xFFFF80AB.toInt(), 0xFFD500F9.toInt()
+                                val s = ambient.secondColor
+                                val e = ambient.color
+                                store.setAmbient(
+                                    ambient.copy(
+                                        color = s,
+                                        secondColor = e,
+                                        perLed = interpolateGradientLeds(s, e),
+                                    )
                                 )
-                                store.setAmbient(ambient.copy(perLed = sunset))
                             },
                             modifier = Modifier.weight(1f),
-                        ) { ButtonLabel("Sunset") }
+                        ) { ButtonLabel("Swap") }
                     }
                 }
 
@@ -290,8 +412,6 @@ fun AmbientScreen(store: Store) {
             }
         }
     }
-
-    QuickSettingsTileCard(LocalContext.current)
 }
 
 /** Saved looks: apply with a tap, save the current one, and move them between devices as JSON. */

@@ -26,10 +26,19 @@ object Renderer {
         when (pattern) {
             Pattern.OFF -> Unit
             Pattern.SOLID -> for (i in 0 until n) out[i] = base
-            Pattern.CUSTOM -> for (i in 0 until n) out[i] = cfg.perLed[i % cfg.perLed.size]
-            Pattern.GRADIENT -> for (i in 0 until n)
-                out[i] = if (cfg.perLed.size == n && cfg.perLed.distinct().size > 1) cfg.perLed[i]
-                else mix(base, cfg.secondColor, i.toDouble() / (n - 1))
+            Pattern.CUSTOM -> {
+                val shift = if (cfg.rotateMs >= 50) ((t / cfg.rotateMs) % n).toInt() else 0
+                for (i in 0 until n) out[i] = cfg.perLed[((i + shift) % n) % cfg.perLed.size]
+            }
+            Pattern.GRADIENT -> {
+                val shift = if (cfg.rotateMs >= 50) ((t / cfg.rotateMs) % n).toInt() else 0
+                val usePerLed = cfg.perLed.size == n && cfg.perLed.distinct().size > 2
+                for (i in 0 until n) {
+                    val idx = (i + shift) % n
+                    out[i] = if (usePerLed) cfg.perLed[idx]
+                    else mix(base, cfg.secondColor, idx.toDouble() / (n - 1))
+                }
+            }
 
             Pattern.BREATHE -> {
                 val phase = (t % speed) / speed.toDouble()

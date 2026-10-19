@@ -50,12 +50,21 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+                "src/main/keepRules/runtime-entrypoints.keep",
+            )
             // Public APKs use the permanent release certificate when signing material is present
             // and remain non-debuggable. The stable certificate enables future in-place updates;
             // Play Protect reputation checks are separate and are not guaranteed by signing alone.
             signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
         }
+    }
+
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     buildFeatures {
@@ -68,7 +77,7 @@ android {
         // The renderer core is shared with the adb host, which is compiled separately into a dex by
         // scripts/build-helper.sh. Including it here also means AdbHelper ships inside the APK, so
         // the adb command can run straight out of the installed app with nothing to push.
-        getByName("main").java.srcDir("../core/src")
+        getByName("main").java.directories.add("../core/src")
     }
 
     compileOptions {
@@ -77,8 +86,14 @@ android {
     }
 
     lint {
-        checkReleaseBuilds = false
+        checkReleaseBuilds = true
         abortOnError = false
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 

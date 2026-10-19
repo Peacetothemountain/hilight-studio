@@ -117,9 +117,11 @@ class DeviceSignals(
             if (!masterEnabled || !settings.value.chargingEnabled || !plugged || batteryPercent < 0) return
             if (settings.value.chargingGauge) return
             show(OWNER_CHARGING, chargingSignalLook(settings.value, batteryPercent), SIGNAL_DURATION_MS)
-            // A normal Handler deliberately does not wake a sleeping device.
-            pulseScheduled = true
-            handler.postDelayed(this, CHARGING_INTERVAL_MS)
+            if (batteryPercent < settings.value.fullPercent) {
+                // A normal Handler deliberately does not wake a sleeping device.
+                pulseScheduled = true
+                handler.postDelayed(this, CHARGING_INTERVAL_MS)
+            }
         }
     }
     private val batteryReceiver = object : BroadcastReceiver() {

@@ -41,6 +41,7 @@ public final class AdbHelper {
 
     private static final long POLL_MS = 100;
     private static final long STATUS_MS = 1000;
+    private static final long MAX_STATE_BYTES = 256 * 1024L;
     private static final int ROOT_UID = 0;
     private static final int SHELL_UID = 2000;
     private static final String DEFAULT_DIR =
@@ -309,14 +310,17 @@ public final class AdbHelper {
      * discarded. (The old order recorded the file as seen first, which lost that update for good.)
      */
     private void reloadIfChanged() {
-        long m = stateFile.lastModified(), s = stateFile.length();
-        if (m == stamp && s == size) return;
+        long m1 = stateFile.lastModified(), s1 = stateFile.length();
+        if (m1 == stamp && s1 == size) return;
         String raw = read(stateFile);
         if (raw == null || raw.isEmpty()) return;       // leave the markers; try again next poll
-        stamp = m;
-        size = s;
+        long m2 = stateFile.lastModified(), s2 = stateFile.length();
+        if (m2 != m1 || s2 != s1) return;               // writer still in flight; retry next poll
         JSONObject state = parse(raw);
-        String target = state == null ? "" : state.optString("bridgeRendererInstanceId", "");
+        if (state == null) return;                      // torn/partial write; retry next poll
+        stamp = m1;
+        size = s1;
+        String target = state.optString("bridgeRendererInstanceId", "");
         if (instanceId.equals(target)) rendererTargetEstablished = true;
         engine.setState(stateForRenderer(
                 raw,
@@ -362,16 +366,17 @@ public final class AdbHelper {
     }
 
     private void writeStatus(long now) {
-        if (!statusFile.exists()) {
+        Path statusPath = statusFile.toPath();
+        if (!Files.isRegularFile(statusPath, LinkOption.NOFOLLOW_LINKS)) {
             if (now - lastStatusWarn > 10_000) {
                 lastStatusWarn = now;
-                Log.w("no " + statusFile.getName() + " — open HiLight Studio once");
+                Log.w("no regular " + statusFile.getName() + " — open HiLight Studio once");
             }
             return;
         }
         try {
             // in-place truncating write, so the app stays the file's owner
-            JSONObject status = new JSONObject(engine.status());
+            JSONObject status = engine.statusJson();
             status.put("owner", owner);
             status.put("rendererInstanceId", instanceId);
             status.put("heartbeatElapsedRealtimeMs", now);
@@ -385,10 +390,15 @@ public final class AdbHelper {
     }
 
     private static String read(File f) {
-        try (RandomAccessFile r = new RandomAccessFile(f, "r")) {
-            byte[] b = new byte[(int) r.length()];
-            r.readFully(b);
-            return new String(b, StandardCharsets.UTF_8);
+        try {
+            if (!Files.isRegularFile(f.toPath(), LinkOption.NOFOLLOW_LINKS)) return null;
+            try (RandomAccessFile r = new RandomAccessFile(f, "r")) {
+                long len = r.length();
+                if (len <= 0 || len > MAX_STATE_BYTES) return null;
+                byte[] b = new byte[(int) len];
+                r.readFully(b);
+                return new String(b, StandardCharsets.UTF_8);
+            }
         } catch (Exception e) {
             return null;
         }

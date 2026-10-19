@@ -118,6 +118,7 @@ fun DeviceHero(
         animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow),
         label = "bloom",
     )
+    val clipPathObj = remember { Path() }
 
     // Assembled before the modifier chain because a semantics block is not a composable scope
     val modelName = profile.labelRes?.let { stringResource(it) } ?: profile.label
@@ -157,9 +158,9 @@ fun DeviceHero(
             drawBody(left, top, phoneW, phoneH, corner)
 
             if (profile.foldStyle) {
-                drawFoldCameraBlock(frame, left, top, phoneW, phoneH, bloom)
+                drawFoldCameraBlock(frame, left, top, phoneW, phoneH, bloom, clipPathObj)
             } else {
-                drawCenteredVisorBar(frame, left, top, phoneW, phoneH, profile, bloom)
+                drawCenteredVisorBar(frame, left, top, phoneW, phoneH, profile, bloom, clipPathObj)
             }
         }
     }
@@ -254,8 +255,9 @@ private fun DrawScope.drawCenteredVisorBar(
     phoneH: Float,
     profile: DeviceProfile,
     bloom: Float,
+    clipPathObj: Path,
 ) {
-    val barW = phoneW * 0.94f
+    val barW = phoneW * (if (profile.lensCount == 2) 0.86f else 0.94f)
     val barH = phoneW * 0.25f
     val barLeft = left + (phoneW - barW) / 2f
     val barTop = top + phoneW * 0.095f
@@ -267,6 +269,9 @@ private fun DrawScope.drawCenteredVisorBar(
         barW = barW,
         barH = barH,
         bloom = bloom,
+        lensCount = profile.lensCount,
+        hasHiLight = profile.hasHiLight,
+        clipPathObj = clipPathObj,
     )
 }
 
@@ -282,6 +287,9 @@ private fun DrawScope.drawPixel11ProCameraIsland(
     barH: Float,
     bloom: Float,
     isCroppedMacro: Boolean = false,
+    lensCount: Int = 3,
+    hasHiLight: Boolean = true,
+    clipPathObj: Path,
 ) {
     val cy = barTop + barH / 2f
     val cornerRadius = CornerRadius(barH / 2f)
@@ -376,32 +384,46 @@ private fun DrawScope.drawPixel11ProCameraIsland(
         cornerRadius = innerCornerRadius,
     )
 
-    // 4. Triple Optical Lenses (Wide 50MP, Center Ultrawide 48MP, 5x Telephoto 48MP)
     val lensR = innerH * 0.36f
-    // As seen on real device: Left Lens (0.19w), Center Lens (0.42w), Right Lens (0.64w), Flash (0.86w)
-    val lx1 = innerLeft + innerW * 0.19f
-    val lx2 = innerLeft + innerW * 0.42f
-    val lx3 = innerLeft + innerW * 0.64f
-    val flashX = innerLeft + innerW * 0.86f
+    if (lensCount == 2 && !hasHiLight && !isCroppedMacro) {
+        // Base Pixel 11: Dual Optical Lenses (Wide + Ultrawide) and standard single LED flash
+        val lx1 = innerLeft + innerW * 0.24f
+        val lx2 = innerLeft + innerW * 0.50f
+        val flashX = innerLeft + innerW * 0.82f
+        drawOfficialCameraLens(lx1, cy, lensR, 1.0f)
+        drawOfficialCameraLens(lx2, cy, lensR * 1.04f, 1.04f)
+        drawCircle(
+            color = Color(0xFFD8D0C5),
+            radius = innerH * 0.14f,
+            center = Offset(flashX, cy),
+        )
+    } else {
+        // 4. Triple Optical Lenses (Wide 50MP, Center Ultrawide 48MP, 5x Telephoto 48MP)
+        // As seen on real device: Left Lens (0.19w), Center Lens (0.42w), Right Lens (0.64w), Flash (0.86w)
+        val lx1 = innerLeft + innerW * 0.19f
+        val lx2 = innerLeft + innerW * 0.42f
+        val lx3 = innerLeft + innerW * 0.64f
+        val flashX = innerLeft + innerW * 0.86f
 
-    // Lens 1: Wide 50MP
-    drawOfficialCameraLens(lx1, cy, lensR, 1.0f)
-    // Lens 2: Center Ultrawide 48MP (slightly larger aperture ring)
-    drawOfficialCameraLens(lx2, cy, lensR * 1.06f, 1.06f)
-    // Lens 3: 5x Telephoto 48MP
-    drawOfficialCameraLens(lx3, cy, lensR, 1.0f)
+        // Lens 1: Wide 50MP
+        drawOfficialCameraLens(lx1, cy, lensR, 1.0f)
+        // Lens 2: Center Ultrawide 48MP (slightly larger aperture ring)
+        drawOfficialCameraLens(lx2, cy, lensR * 1.06f, 1.06f)
+        // Lens 3: 5x Telephoto 48MP
+        drawOfficialCameraLens(lx3, cy, lensR, 1.0f)
 
-    // Tiny sensor dot between lens 3 and flash
-    val sensorX = innerLeft + innerW * 0.76f
-    drawCircle(
-        color = Color(0xFF0D0F0E),
-        radius = barH * 0.026f,
-        center = Offset(sensorX, cy),
-    )
+        // Tiny sensor dot between lens 3 and flash
+        val sensorX = innerLeft + innerW * 0.76f
+        drawCircle(
+            color = Color(0xFF0D0F0E),
+            radius = barH * 0.026f,
+            center = Offset(sensorX, cy),
+        )
 
-    // 5. Official HiLight Diffuser Flash Disc (Far Right - Inset in Sapphire Glass)
-    val flashR = innerH * 0.28f
-    drawHiLightDisc(colors, Offset(flashX, cy), flashR, bloom)
+        // 5. Official HiLight Diffuser Flash Disc (Far Right - Inset in Sapphire Glass)
+        val flashR = innerH * 0.28f
+        drawHiLightDisc(colors, Offset(flashX, cy), flashR, bloom, clipPathObj)
+    }
 }
 
 /**
@@ -467,6 +489,7 @@ private fun DrawScope.drawFoldCameraBlock(
     phoneW: Float,
     phoneH: Float,
     bloom: Float,
+    clipPathObj: Path,
 ) {
     val blockW = phoneW * 0.44f
     val blockH = phoneW * 0.20f
@@ -504,7 +527,7 @@ private fun DrawScope.drawFoldCameraBlock(
     drawLens(blockLeft + blockW * 0.16f, cy, lensR)
     drawLens(blockLeft + blockW * 0.38f, cy, lensR)
     drawPeriscopeLens(blockLeft + blockW * 0.60f, cy, lensR)
-    drawHiLightDisc(frame, Offset(blockLeft + blockW * 0.83f, cy), blockH * 0.28f, bloom)
+    drawHiLightDisc(frame, Offset(blockLeft + blockW * 0.83f, cy), blockH * 0.28f, bloom, clipPathObj)
 
     // Stainless steel hinge seam
     drawRoundRect(
@@ -607,7 +630,13 @@ private fun DrawScope.drawPeriscopeLens(cx: Float, cy: Float, r: Float) {
  * Precision-machined titanium circular bezel ring with a frosted white optical diffuser disc
  * housing 8 addressable micro-LED emitters with true volumetric light scattering.
  */
-private fun DrawScope.drawHiLightDisc(colors: IntArray, center: Offset, radius: Float, bloom: Float) {
+private fun DrawScope.drawHiLightDisc(
+    colors: IntArray,
+    center: Offset,
+    radius: Float,
+    bloom: Float,
+    clipPathObj: Path,
+) {
     val bezelR = radius * 1.16f
 
     // 1. Brushed aerospace titanium bezel housing
@@ -642,7 +671,9 @@ private fun DrawScope.drawHiLightDisc(colors: IntArray, center: Offset, radius: 
     val isLit = bloom > 0.01f && lum > 0.01f
 
     // 2. Frosted Milky-White Diffuser Disc
-    clipPath(Path().apply { addOval(Rect(center = center, radius = radius)) }) {
+    clipPathObj.reset()
+    clipPathObj.addOval(Rect(center = center, radius = radius))
+    clipPath(clipPathObj) {
         // Base milky diffuser background
         val milkyBase = if (isLit) Color(0xFFF4F7FB) else Color(0xFFE2E7EF)
         val milkyEdge = if (isLit) Color(0xFFD0D8E4) else Color(0xFFB8C0CC)
@@ -850,18 +881,27 @@ private fun DrawScope.drawSpill(colors: IntArray, left: Float, top: Float, phone
     )
 }
 
+private val DARK_FRAME = IntArray(LED_COUNT) { 0xFF000000.toInt() }
+
+private fun isStaticPattern(pattern: Pattern, cfg: Ambient): Boolean =
+    pattern == Pattern.OFF ||
+        pattern == Pattern.SOLID ||
+        ((pattern == Pattern.CUSTOM || pattern == Pattern.GRADIENT) && cfg.rotateMs < 50)
+
 /**
  * Drives previews at the hardware's own frame rate using the shared pattern maths, so what is on
  * screen matches what the LEDs are doing.
  */
 @Composable
 fun rememberLedFrame(pattern: Pattern, cfg: Ambient, active: Boolean = true): IntArray {
-    val dark = IntArray(LED_COUNT) { 0xFF000000.toInt() }
-    val frame by produceState(dark, pattern, cfg, active) {
-        if (!active) {
-            value = dark
-            return@produceState
-        }
+    val staticPattern = isStaticPattern(pattern, cfg)
+    val initialFrame = remember(pattern, cfg, active, staticPattern) {
+        if (!active) DARK_FRAME else Renderer.frame(pattern, 0L, cfg)
+    }
+    if (!active || staticPattern) {
+        return initialFrame
+    }
+    val frame by produceState(initialFrame, pattern, cfg, active) {
         val start = System.currentTimeMillis()
         while (true) {
             value = Renderer.frame(pattern, System.currentTimeMillis() - start, cfg)
@@ -934,6 +974,7 @@ fun HiLightDiffuserPreview(
         animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow),
         label = "diffuserBloom",
     )
+    val clipPathObj = remember { Path() }
 
     Box(
         modifier = modifier
@@ -958,6 +999,7 @@ fun HiLightDiffuserPreview(
                 barH = barH,
                 bloom = bloom,
                 isCroppedMacro = true,
+                clipPathObj = clipPathObj,
             )
         }
     }

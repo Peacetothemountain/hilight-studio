@@ -80,7 +80,8 @@ internal object GitHubUpdateChecker {
                         val asset = assets.optJSONObject(i) ?: continue
                         val name = asset.optString("name", "")
                         if (name.endsWith(".apk", ignoreCase = true)) {
-                            apkUrl = asset.optString("browser_download_url").takeIf { it.isNotEmpty() }
+                            apkUrl = asset.optString("browser_download_url")
+                                .takeIf { isTrustedApkUrl(it) }
                             break
                         }
                     }
@@ -106,6 +107,18 @@ internal object GitHubUpdateChecker {
         UpdateCheckResult.Failed
     }
 
+    private fun isTrustedApkUrl(rawUrl: String): Boolean = try {
+        val parsed = URL(rawUrl)
+        val host = parsed.host?.lowercase() ?: ""
+        parsed.protocol.equals("https", ignoreCase = true) &&
+            (host == "github.com" ||
+                host.endsWith(".github.com") ||
+                host == "objects.githubusercontent.com" ||
+                host.endsWith(".githubusercontent.com"))
+    } catch (_: Exception) {
+        false
+    }
+
     private data class ResolvedRelease(
         val tag: String,
         val version: ReleaseVersion,
@@ -116,15 +129,35 @@ internal object GitHubUpdateChecker {
         val major: Int,
         val minor: Int,
         val patch: Int,
+        val prerelease: String? = null,
     ) : Comparable<ReleaseVersion> {
         val displayName: String = "$major.$minor.$patch"
 
-        override fun compareTo(other: ReleaseVersion): Int =
-            compareValuesBy(this, other, ReleaseVersion::major, ReleaseVersion::minor, ReleaseVersion::patch)
+        private val stabilityRank: Int
+            get() = when {
+                prerelease == null || prerelease.equals("experimental", ignoreCase = true) -> 1
+                else -> 0
+            }
+
+        override fun compareTo(other: ReleaseVersion): Int {
+            val base = compareValuesBy(
+                this,
+                other,
+                ReleaseVersion::major,
+                ReleaseVersion::minor,
+                ReleaseVersion::patch,
+                ReleaseVersion::stabilityRank,
+            )
+            if (base != 0) return base
+            if (stabilityRank == 0) {
+                return (prerelease ?: "").compareTo(other.prerelease ?: "", ignoreCase = true)
+            }
+            return 0
+        }
 
         companion object {
             private val VERSION_TAG =
-                Regex("^v?(\\d+)\\.(\\d+)\\.(\\d+)(?:[-+][0-9A-Za-z.-]+)?$")
+                Regex("^v?(\\d+)\\.(\\d+)\\.(\\d+)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?$")
 
             fun parse(value: String): ReleaseVersion? {
                 val match = VERSION_TAG.matchEntire(value.trim()) ?: return null
@@ -132,6 +165,7 @@ internal object GitHubUpdateChecker {
                     major = match.groupValues[1].toIntOrNull() ?: return null,
                     minor = match.groupValues[2].toIntOrNull() ?: return null,
                     patch = match.groupValues[3].toIntOrNull() ?: return null,
+                    prerelease = match.groupValues[4].takeIf { it.isNotEmpty() },
                 )
             }
         }

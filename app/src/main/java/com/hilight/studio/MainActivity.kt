@@ -35,7 +35,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -104,16 +104,34 @@ private enum class Tab(@StringRes val labelRes: Int, val icon: ImageVector) {
     SETUP(R.string.tab_setup, Icons.Rounded.DisplaySettings),
 }
 
+@Composable
+private fun TopBarStatusPill(store: Store) {
+    val status by store.status.collectAsStateWithLifecycle()
+    val active by store.activeTransport.collectAsStateWithLifecycle()
+    val rendererConnected = store.isRendererConnectedForUi(status)
+    LivePill(
+        text = if (rendererConnected) {
+            stringResource(
+                R.string.main_connected_pill,
+                status.ledCount,
+                stringResource(active.labelRes),
+            )
+        } else {
+            stringResource(R.string.main_not_connected)
+        },
+        ok = rendererConnected,
+        modifier = Modifier.padding(end = 16.dp),
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun App(store: Store, startInSetup: Boolean = false) {
     // saved, so a rotation or a recreated activity does not drop the user back on Live
     var tabIndex by rememberSaveable { mutableIntStateOf(if (startInSetup) Tab.SETUP.ordinal else 0) }
     val tab = Tab.entries[tabIndex.coerceIn(0, Tab.entries.lastIndex)]
-    val status by store.status.collectAsStateWithLifecycle()
-    val active by store.activeTransport.collectAsStateWithLifecycle()
     val view = androidx.compose.ui.platform.LocalView.current
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     // Tied to the lifecycle, not just the composition: a plain LaunchedEffect keeps its coroutine
     // running once the activity stops, so this polled the helper over binder and file I/O every 1.5s
@@ -132,29 +150,16 @@ private fun App(store: Store, startInSetup: Boolean = false) {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             // single-line bar: the hero already carries the visual weight
-            LargeTopAppBar(
+            TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        HiLightAppIcon(size = 32)
+                        HiLightAppIcon(size = 30)
                         Spacer(Modifier.width(10.dp))
-                        Text("HiLight", style = MaterialTheme.typography.headlineLarge)
+                        Text("HiLight Studio", style = MaterialTheme.typography.titleLarge)
                     }
                 },
                 actions = {
-                    val rendererConnected = store.isRendererConnectedForUi(status)
-                    LivePill(
-                        text = if (rendererConnected) {
-                            stringResource(
-                                R.string.main_connected_pill,
-                                status.ledCount,
-                                stringResource(active.labelRes),
-                            )
-                        } else {
-                            stringResource(R.string.main_not_connected)
-                        },
-                        ok = rendererConnected,
-                        modifier = Modifier.padding(end = 16.dp),
-                    )
+                    TopBarStatusPill(store)
                 },
                 scrollBehavior = scrollBehavior,
             )

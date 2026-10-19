@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -143,14 +146,17 @@ fun Modifier.pressSquash(pressed: Boolean, min: Float = 0.965f): Modifier {
         ),
         label = "press",
     )
-    return this.scale(scale)
+    return this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
 }
 
 @Composable
 fun PixelCard(
     modifier: Modifier = Modifier,
     tone: Int = 1,
-    shape: Shape = MaterialTheme.shapes.large,
+    shape: Shape = RoundedCornerShape(28.dp),
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
@@ -160,16 +166,19 @@ fun PixelCard(
         3 -> MaterialTheme.colorScheme.surfaceContainerHighest
         else -> MaterialTheme.colorScheme.surfaceContainer
     }
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val view = LocalView.current
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)
     var base = modifier
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 6.dp)
     if (onClick != null) {
+        val interaction = remember { MutableInteractionSource() }
+        val pressed by interaction.collectIsPressedAsState()
+        val view = LocalView.current
         base = base
             .pressSquash(pressed)
             .clip(shape)
+            .background(color, shape)
+            .border(1.dp, borderColor, shape)
             .clickable(
                 interactionSource = interaction,
                 indication = ripple(),
@@ -179,14 +188,18 @@ fun PixelCard(
                     onClick()
                 },
             )
-        Box(base.background(color)) {
+        Box(base) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 content()
             }
         }
         return
     }
-    Box(base.background(color, shape)) {
+    Box(
+        base
+            .background(color, shape)
+            .border(1.dp, borderColor, shape)
+    ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             content()
         }
@@ -242,8 +255,17 @@ fun LivePill(text: String, ok: Boolean, modifier: Modifier = Modifier) {
 
 @Composable
 fun BreathingDot(color: Color, animate: Boolean, size: Int = 8) {
+    if (!animate) {
+        Box(
+            Modifier
+                .size(size.dp)
+                .graphicsLayer { alpha = 0.5f }
+                .background(color, CircleShape)
+        )
+        return
+    }
     val transition = rememberInfiniteTransition(label = "dot")
-    val alpha by transition.animateFloat(
+    val dotAlpha by transition.animateFloat(
         initialValue = 0.35f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(1100), repeatMode = RepeatMode.Reverse),
@@ -252,7 +274,8 @@ fun BreathingDot(color: Color, animate: Boolean, size: Int = 8) {
     Box(
         Modifier
             .size(size.dp)
-            .background(color.copy(alpha = if (animate) alpha else 0.5f), CircleShape)
+            .graphicsLayer { alpha = dotAlpha }
+            .background(color, CircleShape)
     )
 }
 
@@ -269,23 +292,33 @@ fun PixelTile(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val view = LocalView.current
+    val tileShape = RoundedCornerShape(22.dp)
     val container by animateColorAsState(
         if (enabled) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh,
         label = "tileBg",
     )
     val iconBg by animateColorAsState(
-        if (enabled) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+        if (enabled) accent.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceContainerHighest,
         label = "iconBg"
     )
+    val iconBorder by animateColorAsState(
+        if (enabled) accent.copy(alpha = 0.40f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f),
+        label = "iconBorder"
+    )
     val iconColor by animateColorAsState(
-        if (enabled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        if (enabled) accent else MaterialTheme.colorScheme.onSurfaceVariant,
         label = "iconColor"
     )
     Row(
         modifier
             .pressSquash(pressed, min = 0.94f)
-            .clip(MaterialTheme.shapes.large)
-            .background(container)
+            .clip(tileShape)
+            .background(container, tileShape)
+            .border(
+                1.dp,
+                if (enabled) accent.copy(alpha = 0.22f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                tileShape,
+            )
             .clickable(
                 interactionSource = interaction,
                 indication = ripple(),
@@ -296,12 +329,13 @@ fun PixelTile(
             }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .background(iconBg, CircleShape),
+                .background(iconBg, CircleShape)
+                .border(1.dp, iconBorder, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))

@@ -56,7 +56,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -178,7 +181,6 @@ fun SetupScreen(store: Store) {
     val faceDownNoticeAccepted by store.faceDownNoticeAccepted.collectAsStateWithLifecycle()
     val faceDownState by store.faceDownState.collectAsStateWithLifecycle()
     val faceDownSensorAvailable = remember(ctx) { ForegroundWatcher.hasFaceDownSensor(ctx) }
-    val chargingGaugeEnabled by store.chargingGaugeEnabled.collectAsStateWithLifecycle()
     val glowSuppression = suppression?.takeIf {
         it.settingsSection() == SettingsSuppressionSection.GLOW
     }
@@ -234,12 +236,15 @@ fun SetupScreen(store: Store) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            notifAccess = hasNotificationAccess(ctx)
-            usageAccess = ForegroundWatcher.hasUsageAccess(ctx)
-            store.shizuku.refresh()
-            delay(1500)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                notifAccess = hasNotificationAccess(ctx)
+                usageAccess = ForegroundWatcher.hasUsageAccess(ctx)
+                store.shizuku.refresh()
+                delay(1500)
+            }
         }
     }
 
@@ -277,15 +282,6 @@ fun SetupScreen(store: Store) {
                 stringResource(R.string.setup_warn_long_confirm_body),
             onChange = { store.setAmbientTimeoutMs(it) },
         )
-    }
-
-    PixelCard {
-        SectionTitle(stringResource(R.string.setup_charging_gauge_title))
-        Caption(stringResource(R.string.setup_charging_gauge_body))
-        ToggleRow(
-            label = stringResource(R.string.setup_charging_gauge_title),
-            checked = chargingGaugeEnabled,
-        ) { store.setChargingGaugeEnabled(it) }
     }
 
     PixelCard {
@@ -1003,46 +999,81 @@ private fun openExternalUrl(ctx: Context, pageUrl: String) {
         .onFailure { Toast.makeText(ctx, R.string.setup_no_browser, Toast.LENGTH_SHORT).show() }
 }
 
+private const val MAX_APK_BYTES = 64L * 1024 * 1024
+@Volatile private var isDownloadingApk = false
+
 private fun downloadAndInstallApk(ctx: Context, apkUrl: String, onProgress: (Boolean) -> Unit) {
+    if (isDownloadingApk) return
+    isDownloadingApk = true
     onProgress(true)
     Thread {
         try {
             val url = URL(apkUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 60_000
-            connection.connect()
-
-            val updateDir = File(ctx.cacheDir, "updates").apply { mkdirs() }
-            val apkFile = File(updateDir, "HiLightStudioUpdate.apk")
-            if (apkFile.exists()) apkFile.delete()
-
-            connection.inputStream.use { input ->
-                apkFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
+            require(url.protocol.equals("https", ignoreCase = true)) { "HTTPS required" }
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15_000
+                readTimeout = 60_000
             }
-
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                onProgress(false)
-                try {
-                    val uri = FileProvider.getUriForFile(
-                        ctx,
-                        "${ctx.packageName}.provider",
-                        apkFile,
-                    )
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, "application/vnd.android.package-archive")
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    }
-                    ctx.startActivity(intent)
-                } catch (e: Exception) {
-                    Toast.makeText(ctx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
+            try {
+                connection.connect()
+                require(connection.responseCode in 200..299) {
+                    "HTTP ${connection.responseCode}"
                 }
+
+                val updateDir = File(ctx.cacheDir, "updates").apply { mkdirs() }
+                val apkFile = File(updateDir, "HiLightStudioUpdate.apk")
+                if (apkFile.exists()) apkFile.delete()
+
+                connection.inputStream.use { input ->
+                    apkFile.outputStream().use { output ->
+                        val buffer = ByteArray(8192)
+                        var total = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            total += read
+                            if (total > MAX_APK_BYTES) {
+                                throw IllegalStateException("APK exceeds maximum size")
+                            }
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                }
+
+                val archiveInfo = ctx.packageManager.getPackageArchiveInfo(
+                    apkFile.absolutePath,
+                    android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES,
+                )
+                if (archiveInfo == null || archiveInfo.packageName != ctx.packageName) {
+                    apkFile.delete()
+                    throw SecurityException("APK package mismatch")
+                }
+
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    isDownloadingApk = false
+                    onProgress(false)
+                    try {
+                        val uri = FileProvider.getUriForFile(
+                            ctx,
+                            "${ctx.packageName}.provider",
+                            apkFile,
+                        )
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "application/vnd.android.package-archive")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        ctx.startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(ctx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } finally {
+                connection.disconnect()
             }
         } catch (e: Exception) {
             android.os.Handler(android.os.Looper.getMainLooper()).post {
+                isDownloadingApk = false
                 onProgress(false)
                 Toast.makeText(ctx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
             }

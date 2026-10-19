@@ -245,7 +245,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
     val state: StateFlow<State> = _state.asStateFlow()
     private val main = Handler(Looper.getMainLooper())
 
-    private var service: IHiLightService? = null
+    @Volatile private var service: IHiLightService? = null
     /** Raw text from a failure. Comes from the framework, so it is not translated. */
     private var lastError: String? = null
 
@@ -254,7 +254,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
     private var lastErrorRes: Int? = null
 
     /** Latest staged document; Store explicitly decides when ownership makes replay safe. */
-    private var pending: String? = null
+    @Volatile private var pending: String? = null
 
     /** One automatic remove/rebind is allowed before an incompatible renderer fails closed. */
     private var compatibilityRebindAttempted = false
@@ -292,16 +292,16 @@ class ShizukuBackend(private val ctx: Context) : Backend {
     private var untrackableCandidatePresent = false
 
     /** A partial status cannot erase the last complete sample for the same exact binder. */
-    private var lastCompleteStatusBinder: IBinder? = null
-    private var lastCompleteStatus: JSONObject? = null
+    @Volatile private var lastCompleteStatusBinder: IBinder? = null
+    @Volatile private var lastCompleteStatus: JSONObject? = null
 
     /**
      * A rejected daemon may still own a visible framework session until its binder is confirmed
      * disconnected. Keep both the binder and its last status so FAILED cannot be mistaken for safe
      * fallback availability.
      */
-    private var incompatibleService: IHiLightService? = null
-    private var incompatibleStatus: JSONObject? = null
+    @Volatile private var incompatibleService: IHiLightService? = null
+    @Volatile private var incompatibleStatus: JSONObject? = null
     private val _unresolvedIncompatibleRenderer = MutableStateFlow(false)
     val unresolvedIncompatibleRenderer: StateFlow<Boolean> =
         _unresolvedIncompatibleRenderer.asStateFlow()
@@ -454,7 +454,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
             compatibilityRebindAttempted = false
             clearConnectionAttemptState()
             lastCompleteStatusBinder = binder
-            lastCompleteStatus = JSONObject(check.status.toString())
+            lastCompleteStatus = check.status
             lastError = null
             lastErrorRes = null
             _state.value = State.CONNECTED
@@ -483,16 +483,18 @@ class ShizukuBackend(private val ctx: Context) : Backend {
 
     private val permissionListener =
         Shizuku.OnRequestPermissionResultListener { _, grantResult ->
-            if (grantResult == PackageManager.PERMISSION_GRANTED) bind() else {
-                _state.value = State.NEEDS_PERMISSION
+            main.post {
+                if (grantResult == PackageManager.PERMISSION_GRANTED) bind() else {
+                    _state.value = State.NEEDS_PERMISSION
+                }
             }
         }
 
     init {
         Shizuku.addRequestPermissionResultListener(permissionListener)
-        Shizuku.addBinderReceivedListenerSticky { refresh() }
+        Shizuku.addBinderReceivedListenerSticky { main.post { refresh() } }
         Shizuku.addBinderDeadListener {
-            handleManagerBinderDeath()
+            main.post { handleManagerBinderDeath() }
         }
         refresh()
     }
@@ -1363,11 +1365,11 @@ class ShizukuBackend(private val ctx: Context) : Backend {
             val retained = retainedShizukuStatus(liveStatus, previous)
             if (liveStatus != null && retained === liveStatus) {
                 lastCompleteStatusBinder = binder
-                lastCompleteStatus = JSONObject(liveStatus.toString())
+                lastCompleteStatus = liveStatus
             }
             retained
         } else if (liveStatus != null && isCompleteShizukuRendererStatus(liveStatus)) {
-            incompatibleStatus = JSONObject(liveStatus.toString())
+            incompatibleStatus = liveStatus
             liveStatus
         } else {
             incompatibleStatus ?: liveStatus

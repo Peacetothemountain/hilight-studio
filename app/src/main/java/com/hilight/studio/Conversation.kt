@@ -173,6 +173,9 @@ enum class MatchStrength(val score: Int) {
 
 object ConversationMatch {
 
+    private val NON_ALNUM_REGEX = Regex("[^\\p{L}\\p{N}\\s]")
+    private val WHITESPACE_REGEX = Regex("\\s+")
+
     /**
      * Names are compared with punctuation, emoji and case removed.
      *
@@ -183,8 +186,8 @@ object ConversationMatch {
     fun normalise(raw: String?): String {
         if (raw.isNullOrBlank()) return ""
         return raw
-            .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")   // strips emoji, brackets, +, dashes
-            .replace(Regex("\\s+"), " ")
+            .replace(NON_ALNUM_REGEX, " ")   // strips emoji, brackets, +, dashes
+            .replace(WHITESPACE_REGEX, " ")
             .trim()
             .lowercase()
     }

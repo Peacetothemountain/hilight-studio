@@ -214,29 +214,14 @@ fun LiveScreen(store: Store) {
         }
     }
 
-    // Android 17 8-LED Flashlight with animated beam & color spectrum long-press
+    // Android 17 8-LED Flashlight with animated beam & Pro Studio Color / CCT controls
     Android17FlashlightCard(store = store)
-
-
-    // Each tile borrows its pattern's own name, so the label is a string resource id. Random is the
-    // exception: a third of a row is too narrow for "Random colours".
-    val tests: List<Triple<Int, ImageVector, Pair<Pattern, Int>>> = listOf(
-        Triple(Pattern.RAINBOW.shortLabelRes, Icons.Rounded.AutoAwesome, Pattern.RAINBOW to 0xFFFFFFFF.toInt()),
-        Triple(R.string.live_test_random, Icons.Rounded.Casino, Pattern.RANDOM to 0xFFFFFFFF.toInt()),
-        Triple(Pattern.STROBE.shortLabelRes, Icons.Rounded.FlashOn, Pattern.STROBE to 0xFFFFFFFF.toInt()),
-        Triple(Pattern.COMET.shortLabelRes, Icons.Rounded.Flare, Pattern.COMET to 0xFF00E5FF.toInt()),
-        Triple(Pattern.PULSE.shortLabelRes, Icons.Rounded.Bolt, Pattern.PULSE to 0xFFFF1744.toInt()),
-        Triple(Pattern.HEARTBEAT.shortLabelRes, Icons.Rounded.Favorite, Pattern.HEARTBEAT to 0xFFFF1744.toInt()),
-        Triple(Pattern.BREATHE.shortLabelRes, Icons.Rounded.Nightlight, Pattern.BREATHE to 0xFF7C4DFF.toInt()),
-        Triple(Pattern.WAVE.shortLabelRes, Icons.Rounded.Waves, Pattern.WAVE to 0xFF00E676.toInt()),
-        Triple(Pattern.RADAR.shortLabelRes, Icons.Rounded.Radar, Pattern.RADAR to 0xFF00E5FF.toInt()),
-    )
 
     PixelCard {
         SectionTitle(stringResource(R.string.live_tests_title))
         Caption(stringResource(R.string.live_tests_caption))
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            tests.chunked(3).forEach { row ->
+            QUICK_TESTS.chunked(2).forEach { row ->
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -249,6 +234,9 @@ fun LiveScreen(store: Store) {
                             enabled = enabled && status.alive,
                             modifier = Modifier.weight(1f),
                         ) { launchPreview(spec.first, spec.second, 1200, 1f, 4_000) }
+                    }
+                    if (row.size == 1) {
+                        Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -295,10 +283,25 @@ fun LiveScreen(store: Store) {
     }
 }
 
+// Each tile borrows its pattern's own name, so the label is a string resource id. Random is the
+// exception: a tile is too narrow for "Random colours".
+private val QUICK_TESTS: List<Triple<Int, ImageVector, Pair<Pattern, Int>>> = listOf(
+    Triple(Pattern.RAINBOW.shortLabelRes, Icons.Rounded.AutoAwesome, Pattern.RAINBOW to 0xFFFFFFFF.toInt()),
+    Triple(R.string.live_test_random, Icons.Rounded.Casino, Pattern.RANDOM to 0xFFFFFFFF.toInt()),
+    Triple(Pattern.STROBE.shortLabelRes, Icons.Rounded.FlashOn, Pattern.STROBE to 0xFFFFFFFF.toInt()),
+    Triple(Pattern.COMET.shortLabelRes, Icons.Rounded.Flare, Pattern.COMET to 0xFF00E5FF.toInt()),
+    Triple(Pattern.PULSE.shortLabelRes, Icons.Rounded.Bolt, Pattern.PULSE to 0xFFFF1744.toInt()),
+    Triple(Pattern.HEARTBEAT.shortLabelRes, Icons.Rounded.Favorite, Pattern.HEARTBEAT to 0xFFFF1744.toInt()),
+    Triple(Pattern.BREATHE.shortLabelRes, Icons.Rounded.Nightlight, Pattern.BREATHE to 0xFF7C4DFF.toInt()),
+    Triple(Pattern.WAVE.shortLabelRes, Icons.Rounded.Waves, Pattern.WAVE to 0xFF00E676.toInt()),
+    Triple(Pattern.RADAR.shortLabelRes, Icons.Rounded.Radar, Pattern.RADAR to 0xFF00E5FF.toInt()),
+)
+
 /**
  * Android 17 style 8-LED Flashlight Quick Action Card:
- * Features Google's Pixel Android 17 style expanding ray flashlight animation,
- * one-tap toggle with spring physics, and long-press opening the Color Spectrum Wheel.
+ * Features Google's Pixel Android 17 style flashlight controls,
+ * one-tap toggle with spring physics, inline Pro Studio Color & Temperature (K) drawer,
+ * and long-press opening the Color Spectrum Wheel.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -310,6 +313,8 @@ fun Android17FlashlightCard(
     val brightness by store.flashlightBrightness.collectAsStateWithLifecycle()
     val view = androidx.compose.ui.platform.LocalView.current
     var showColorPicker by remember { mutableStateOf(false) }
+    var showStudioDrawer by remember { mutableStateOf(false) }
+    var cctKelvin by remember { mutableStateOf(4500f) }
 
     val currentColor = Color(color)
     val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -320,19 +325,6 @@ fun Android17FlashlightCard(
             stiffness = Spring.StiffnessMediumLow,
         ),
         label = "flashlightBg",
-    )
-    val animatedBeamScale by animateFloatAsState(
-        targetValue = if (active) 1.25f else 0.85f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessMediumLow,
-        ),
-        label = "beamScale",
-    )
-    val animatedBeamAlpha by animateFloatAsState(
-        targetValue = if (active) 0.95f else 0.35f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
-        label = "beamAlpha",
     )
 
     PixelCard(tone = if (active) 3 else 2) {
@@ -397,7 +389,7 @@ fun Android17FlashlightCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                // Color Swatch
+                // Color Swatch toggles the inline Pro Studio Color & Temperature drawer
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -405,7 +397,7 @@ fun Android17FlashlightCard(
                         .background(currentColor)
                         .clickable(role = androidx.compose.ui.semantics.Role.Button) {
                             PixelHaptics.click(view)
-                            showColorPicker = true
+                            showStudioDrawer = !showStudioDrawer
                         }
                 )
                 androidx.compose.material3.Switch(
@@ -419,11 +411,14 @@ fun Android17FlashlightCard(
         }
 
         AnimatedVisibility(
-            visible = active,
+            visible = active || showStudioDrawer,
             enter = fadeIn() + expandVertically(),
             exit = fadeOut() + shrinkVertically(),
         ) {
-            Column(modifier = Modifier.padding(top = 10.dp)) {
+            Column(
+                modifier = Modifier.padding(top = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
                 PixelSlider(
                     label = stringResource(R.string.widget_intensity),
                     value = brightness,
@@ -432,9 +427,7 @@ fun Android17FlashlightCard(
                     format = { "%.0f%%".format(it * 100f) },
                 )
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     val presets = listOf(0.25f, 0.50f, 0.75f, 1.0f)
@@ -467,6 +460,112 @@ fun Android17FlashlightCard(
                                 style = MaterialTheme.typography.labelMedium,
                                 color = fg,
                             )
+                        }
+                    }
+                }
+
+                // Toggleable Pro Studio Color & Temperature (K) drawer
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(
+                                    if (showStudioDrawer) MaterialTheme.colorScheme.primaryContainer
+                                    else MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
+                                .clickable {
+                                    PixelHaptics.click(view)
+                                    showStudioDrawer = !showStudioDrawer
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "Pro Studio Color & CCT",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (showStudioDrawer) MaterialTheme.colorScheme.onPrimaryContainer
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.secondaryContainer)
+                                .clickable {
+                                    PixelHaptics.click(view)
+                                    showColorPicker = true
+                                }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = "Wheel",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                    }
+                    HexColorPill(color = color, onColorChanged = { store.setFlashlightColor(it) })
+                }
+
+                AnimatedVisibility(
+                    visible = showStudioDrawer,
+                    enter = fadeIn(tween(180)) + expandVertically(tween(200)),
+                    exit = fadeOut(tween(120)) + shrinkVertically(tween(160)),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        PixelSlider(
+                            label = "Color Temp (CCT)",
+                            value = cctKelvin,
+                            range = 2000f..7000f,
+                            onChange = { k ->
+                                cctKelvin = k
+                                store.setFlashlightColor(TileDialogActivity.kelvinToRgb(k.toInt()))
+                            },
+                            format = { "${it.toInt()}K" },
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(
+                                2700 to "Warm 2700K",
+                                4000 to "Neutral 4000K",
+                                5500 to "Daylight 5500K",
+                                6500 to "Cool 6500K",
+                            ).forEach { (kelvin, label) ->
+                                val kColor = remember(kelvin) { TileDialogActivity.kelvinToRgb(kelvin) }
+                                val selected = color == kColor
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                                            else MaterialTheme.colorScheme.surfaceContainerHighest
+                                        )
+                                        .clickable {
+                                            PixelHaptics.tick(view)
+                                            cctKelvin = kelvin.toFloat()
+                                            store.setFlashlightColor(kColor)
+                                        }
+                                        .padding(vertical = 7.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "${kelvin}K",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

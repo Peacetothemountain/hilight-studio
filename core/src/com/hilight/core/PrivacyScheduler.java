@@ -65,6 +65,9 @@ public final class PrivacyScheduler {
     }
 
     public static final class Decision {
+        private static final Decision INACTIVE_DECISION =
+                new Decision(Phase.INACTIVE, null, null, 0, 0);
+
         public final Phase phase;
         public final String ruleId;
         public final Activity activity;
@@ -81,7 +84,7 @@ public final class PrivacyScheduler {
         }
 
         private static Decision inactive() {
-            return new Decision(Phase.INACTIVE, null, null, 0, 0);
+            return INACTIVE_DECISION;
         }
 
         private static Decision exhausted(Activity activity) {
@@ -135,6 +138,7 @@ public final class PrivacyScheduler {
     }
 
     public Decision decision(long now) {
+        if (rules.isEmpty() || anyEpisodes.isEmpty()) return Decision.inactive();
         Selection camera = select(Activity.CAMERA, now);
         if (camera.eligible != null) return decide(camera, now);
         Selection microphone = select(Activity.MICROPHONE, now);
