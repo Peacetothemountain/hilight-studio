@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -34,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -137,6 +139,7 @@ fun AppRulesScreen(store: Store) {
     var choosingPrivacyActivity by remember { mutableStateOf(false) }
     var privacyPrefilledApp by remember { mutableStateOf<InstalledApp?>(null) }
     var pickingPrivacyAppFor by remember { mutableStateOf<PrivacyActivity?>(null) }
+    var inspecting by remember { mutableStateOf(false) }
     val learnedPackages = remember(conversations) {
         conversations.mapTo(mutableSetOf()) { it.pkg }
     }
@@ -183,21 +186,119 @@ fun AppRulesScreen(store: Store) {
         }
     }
 
+    val anyAppLabel = stringResource(R.string.rules_any_app)
     PixelCard(tone = 2) {
-        SectionTitle(stringResource(R.string.rules_section_title))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f, fill = false),
+            ) {
+                Box(
+                    Modifier
+                        .size(38.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.Apps,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Text(
+                    stringResource(R.string.rules_section_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        "${rules.count { it.enabled }} App Rules",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+                Box(
+                    Modifier
+                        .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        "${privacyRules.count { it.enabled }} Privacy",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
+        }
         Caption(stringResource(R.string.rules_intro_apps))
         Caption(stringResource(R.string.rules_intro_messaging))
-        Row {
-            TextButton(onClick = { confirmExport = true }) { Text(stringResource(R.string.rules_export)) }
-            TextButton(onClick = { importRules.launch(arrayOf("application/json", "text/plain")) }) { Text(stringResource(R.string.rules_import)) }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Button(
+                onClick = { picking = true },
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                ButtonLabel(stringResource(R.string.rules_add))
+            }
+            FilledTonalButton(
+                onClick = {
+                    val existingCatchAll = rules.firstOrNull { it.isCatchAll }
+                    if (existingCatchAll != null) {
+                        editing = RuleEditorState(existingCatchAll, isNew = false)
+                    } else {
+                        startWholeAppRule(InstalledApp(AppRule.ANY_APP, anyAppLabel, null))
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Rounded.Apps, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                ButtonLabel(anyAppLabel)
+            }
         }
-        Button(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Rounded.Add, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            ButtonLabel(stringResource(R.string.rules_add))
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton(
+                onClick = { confirmExport = true },
+                shape = CircleShape,
+            ) {
+                ButtonLabel(stringResource(R.string.rules_export))
+            }
+            OutlinedButton(
+                onClick = { importRules.launch(arrayOf("application/json", "text/plain")) },
+                shape = CircleShape,
+            ) {
+                ButtonLabel(stringResource(R.string.rules_import))
+            }
+            OutlinedButton(
+                onClick = { inspecting = true },
+                shape = CircleShape,
+            ) {
+                ButtonLabel(stringResource(R.string.setup_inspector_button))
+            }
         }
         if (suggestedApps.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(4.dp))
             Caption(stringResource(R.string.rules_quick_setup))
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -208,20 +309,41 @@ fun AppRulesScreen(store: Store) {
                         Modifier
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                CircleShape,
+                            )
                             .clickable {
                                 if (offersConversations(store, app)) scoping = app
                                 else startWholeAppRule(app)
                             }
-                            .padding(start = 6.dp, end = 12.dp, top = 6.dp, bottom = 6.dp),
+                            .padding(start = 8.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        AppPackageIcon(app.pkg, modifier = Modifier.size(24.dp))
+                        AppPackageIcon(app.pkg, modifier = Modifier.size(20.dp))
                         Text(app.label, style = MaterialTheme.typography.labelMedium)
+                        Box(
+                            Modifier
+                                .size(18.dp)
+                                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "+",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    if (inspecting) {
+        NotificationInspectorDialog(store) { inspecting = false }
     }
 
     // Preserve the existing cards and editors; only apps with several rules need a group header.
@@ -252,6 +374,7 @@ fun AppRulesScreen(store: Store) {
                                     )
                                 }
                             },
+                            onCopy = if (rule.isConversationRule) null else ({ copyingFrom = rule }),
                             onDelete = { store.removeRule(rule) },
                         )
                         if (group.size > 1) Row {
@@ -533,6 +656,7 @@ private fun RuleCard(
     onToggle: (Boolean) -> Unit,
     onEdit: () -> Unit,
     onTest: () -> Unit,
+    onCopy: (() -> Unit)? = null,
     onDelete: () -> Unit,
 ) {
     val perChat = rule.isConversationRule
@@ -553,27 +677,37 @@ private fun RuleCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
-                Modifier.fillMaxWidth(0.72f),
+                Modifier.fillMaxWidth(0.75f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Box(contentAlignment = Alignment.BottomEnd) {
-                    AppPackageIcon(rule.pkg, modifier = Modifier.size(38.dp))
+                    Box(
+                        Modifier
+                            .size(48.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceContainerHighest,
+                                RoundedCornerShape(14.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AppPackageIcon(rule.pkg, modifier = Modifier.size(40.dp))
+                    }
                     if (!rule.randomColor) {
                         Box(
                             Modifier
-                                .size(13.dp)
+                                .size(14.dp)
                                 .background(Color(shownColor), CircleShape)
                                 .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                         )
                     }
                 }
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     if (perChat) {
                         Caption(ruleLabel(rule))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text(
                                 rule.conversationName ?: ruleLabel(rule),
@@ -582,12 +716,6 @@ private fun RuleCard(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false),
                             )
-                            // The rule's own field is consulted alongside the learned chat because
-                            // the learned list is not a reliable source for this: it is capped at
-                            // ConversationRef.MAX_REMEMBERED, the user can clear it from the setup
-                            // screen, and a rule made through the contact picker was never in it at
-                            // all. Reading only the list made the badge vanish in all three cases,
-                            // which is exactly what conversationIsGroup was added to prevent.
                             when {
                                 chat?.isGroup == true || rule.conversationIsGroup ->
                                     ConversationBadge(stringResource(R.string.chat_badge_group))
@@ -599,9 +727,39 @@ private fun RuleCard(
                     } else {
                         Text(ruleLabel(rule), style = MaterialTheme.typography.titleMedium)
                     }
-                    // One format string rather than three fragments joined with a separator: the
-                    // order of "what it looks like" and "when it fires" is not the same in every
-                    // language, and neither is the punctuation between them.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                        ) {
+                            Text(
+                                stringResource(
+                                    if (rule.trigger == Trigger.NOTIFICATION)
+                                        R.string.rules_trigger_notification_short
+                                    else R.string.rules_trigger_foreground_short
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                        if (rule.useAppColor) {
+                            Box(
+                                Modifier
+                                    .background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    stringResource(R.string.rules_app_color),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                )
+                            }
+                        }
+                    }
                     Caption(
                         stringResource(
                             R.string.rules_card_summary,
@@ -615,9 +773,6 @@ private fun RuleCard(
                     )
                     if (rule.keyword.isNotBlank()) Caption(stringResource(R.string.rules_keyword_summary, rule.keyword))
                     if (rule.trigger == Trigger.NOTIFICATION) {
-                        // "Matched", not "fired": the match is recorded even when a guard — quiet
-                        // hours, the battery floor, the master switch — swallowed the flash, and
-                        // "your rule matched but quiet hours ate it" is the more useful answer.
                         Caption(
                             if (lastMatchedMs != null) {
                                 stringResource(
@@ -639,18 +794,36 @@ private fun RuleCard(
                 },
             )
         }
-        LedStrip(
-            rule.pattern,
-            rule.effectiveLook(shownColor),
-            active = rule.enabled,
-            heightDp = 34,
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.55f))
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
+                    RoundedCornerShape(14.dp),
+                )
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        ) {
+            LedStrip(
+                rule.pattern,
+                rule.effectiveLook(shownColor),
+                active = rule.enabled,
+                heightDp = 34,
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(onClick = onTest, modifier = Modifier.weight(1f)) {
+                ButtonLabel(stringResource(R.string.common_test))
+            }
             FilledTonalButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
                 ButtonLabel(stringResource(R.string.common_edit))
             }
-            FilledTonalButton(onClick = onTest, modifier = Modifier.weight(1f)) {
-                ButtonLabel(stringResource(R.string.common_test))
+            if (onCopy != null) {
+                FilledTonalButton(onClick = onCopy, modifier = Modifier.weight(1f)) {
+                    ButtonLabel("Copy")
+                }
             }
             TextButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
                 ButtonLabel(stringResource(R.string.common_delete))

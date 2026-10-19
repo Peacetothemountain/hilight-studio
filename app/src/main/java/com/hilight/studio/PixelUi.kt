@@ -31,14 +31,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.ripple
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -54,13 +50,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
@@ -164,7 +164,9 @@ fun PixelCard(
         3 -> MaterialTheme.colorScheme.surfaceContainerHighest
         else -> MaterialTheme.colorScheme.surfaceContainer
     }
-    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f)
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(
+        alpha = if (tone >= 2) 0.28f else 0.16f,
+    )
     var base = modifier
         .fillMaxWidth()
         .padding(horizontal = 16.dp, vertical = 6.dp)
@@ -195,6 +197,7 @@ fun PixelCard(
     }
     Box(
         base
+            .clip(shape)
             .background(color, shape)
             .border(1.dp, borderColor, shape)
     ) {
@@ -277,13 +280,14 @@ fun BreathingDot(color: Color, animate: Boolean, size: Int = 8) {
     )
 }
 
-/** Quick-Settings style tile: big rounded square, icon over label, springy. */
+/** Quick-Settings style tile: big rounded square, icon over label, springy, with active radial glow. */
 @Composable
 fun PixelTile(
     label: String,
     icon: ImageVector,
     accent: Color,
     enabled: Boolean = true,
+    active: Boolean = false,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -291,21 +295,42 @@ fun PixelTile(
     val pressed by interaction.collectIsPressedAsState()
     val view = LocalView.current
     val tileShape = RoundedCornerShape(22.dp)
+    val isActive = active && enabled
     val container by animateColorAsState(
-        if (enabled) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainerHigh,
+        when {
+            isActive -> accent.copy(alpha = 0.22f)
+            enabled -> MaterialTheme.colorScheme.surfaceContainerHighest
+            else -> MaterialTheme.colorScheme.surfaceContainerHigh
+        },
         label = "tileBg",
     )
+    val tileBorderColor by animateColorAsState(
+        when {
+            isActive -> accent
+            enabled -> accent.copy(alpha = 0.22f)
+            else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f)
+        },
+        label = "tileBorder",
+    )
     val iconBg by animateColorAsState(
-        if (enabled) accent.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceContainerHighest,
-        label = "iconBg"
+        when {
+            isActive -> accent.copy(alpha = 0.28f)
+            enabled -> accent.copy(alpha = 0.16f)
+            else -> MaterialTheme.colorScheme.surfaceContainerHighest
+        },
+        label = "iconBg",
     )
     val iconBorder by animateColorAsState(
-        if (enabled) accent.copy(alpha = 0.40f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f),
-        label = "iconBorder"
+        when {
+            isActive -> accent.copy(alpha = 0.85f)
+            enabled -> accent.copy(alpha = 0.40f)
+            else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.20f)
+        },
+        label = "iconBorder",
     )
     val iconColor by animateColorAsState(
         if (enabled) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-        label = "iconColor"
+        label = "iconColor",
     )
     Row(
         modifier
@@ -313,8 +338,8 @@ fun PixelTile(
             .clip(tileShape)
             .background(container, tileShape)
             .border(
-                1.dp,
-                if (enabled) accent.copy(alpha = 0.22f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                if (isActive) 1.5.dp else 1.dp,
+                tileBorderColor,
                 tileShape,
             )
             .clickable(
@@ -333,19 +358,40 @@ fun PixelTile(
         Box(
             modifier = Modifier
                 .size(44.dp)
+                .then(
+                    if (isActive) {
+                        Modifier.drawBehind {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        accent.copy(alpha = 0.45f),
+                                        accent.copy(alpha = 0.16f),
+                                        Color.Transparent,
+                                    ),
+                                    center = center,
+                                    radius = size.minDimension * 0.78f,
+                                ),
+                            )
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
                 .background(iconBg, CircleShape)
-                .border(1.dp, iconBorder, CircleShape),
-            contentAlignment = Alignment.Center
+                .border(if (isActive) 1.5.dp else 1.dp, iconBorder, CircleShape),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
         }
         Text(
             label,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
+            ),
             color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f),
             maxLines = 2,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -607,8 +653,7 @@ fun ButtonLabel(text: String) {
     )
 }
 
-/** Pill segmented selector — the control Pixel uses for small either/or choices. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Pill segmented selector — the control Pixel 11 uses for small either/or choices. */
 @Composable
 fun <T> SegmentedSelector(
     options: List<T>,
@@ -620,19 +665,73 @@ fun <T> SegmentedSelector(
     modifier: Modifier = Modifier,
 ) {
     val view = LocalView.current
-    SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth().selectableGroup()) {
-        options.forEachIndexed { i, option ->
-            SegmentedButton(
-                selected = option == selected,
-                onClick = {
-                    PixelHaptics.click(view)
-                    onSelect(option)
-                },
-                shape = SegmentedButtonDefaults.itemShape(index = i, count = options.size),
-                label = { Text(label(option), style = MaterialTheme.typography.labelLarge) },
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .selectableGroup()
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                shape = CircleShape,
             )
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        options.forEach { option ->
+            val isSelected = option == selected
+            val bg by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                label = "segBg",
+            )
+            val fg by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                label = "segFg",
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(CircleShape)
+                    .background(bg, CircleShape)
+                    .clickable(role = Role.RadioButton) {
+                        PixelHaptics.click(view)
+                        onSelect(option)
+                    }
+                    .padding(vertical = 10.dp, horizontal = 8.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label(option),
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    ),
+                    color = fg,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
+}
+
+@Composable
+fun <T> SegmentedSelector(
+    items: List<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    label: @Composable (T) -> String,
+) {
+    SegmentedSelector(
+        options = items,
+        selected = selected,
+        label = label,
+        onSelect = onSelect,
+        modifier = modifier,
+    )
 }
 
 /**

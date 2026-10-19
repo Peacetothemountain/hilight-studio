@@ -1,6 +1,7 @@
 package com.hilight.studio
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,11 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -34,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -72,18 +76,50 @@ fun PrivacyRulesSection(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Box(Modifier.size(14.dp).background(Color(rule.color), CircleShape))
-                        Column {
+                        val ruleColor = Color(rule.color)
+                        Box(
+                            Modifier
+                                .size(44.dp)
+                                .background(ruleColor.copy(alpha = 0.18f), CircleShape)
+                                .border(1.dp, ruleColor.copy(alpha = 0.45f), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = if (rule.activity == PrivacyActivity.MICROPHONE)
+                                    Icons.Rounded.Mic
+                                else Icons.Rounded.Videocam,
+                                contentDescription = null,
+                                tint = ruleColor,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
                                 if (rule.activity == PrivacyActivity.MICROPHONE)
                                     stringResource(R.string.privacy_microphone_active)
                                 else stringResource(R.string.privacy_camera_active),
                                 style = MaterialTheme.typography.titleMedium,
                             )
-                            Caption(
-                                if (rule.isCatchAll) stringResource(R.string.rules_any_app)
-                                else rule.appLabel.ifBlank { rule.pkg }
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    Modifier
+                                        .background(
+                                            MaterialTheme.colorScheme.secondaryContainer,
+                                            CircleShape,
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        if (rule.isCatchAll) stringResource(R.string.rules_any_app)
+                                        else rule.appLabel.ifBlank { rule.pkg },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    )
+                                }
+                            }
                             Caption(
                                 stringResource(
                                     R.string.privacy_card_summary,
@@ -102,24 +138,37 @@ fun PrivacyRulesSection(
                         },
                     )
                 }
-                LedStrip(
-                    rule.pattern,
-                    Ambient(
-                        pattern = rule.pattern,
-                        color = rule.color,
-                        secondColor = rule.secondColor,
-                        speedMs = rule.speedMs,
-                        brightness = rule.brightness,
-                    ),
-                    active = rule.enabled,
-                    heightDp = 34,
-                )
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.55f))
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
+                            RoundedCornerShape(14.dp),
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    LedStrip(
+                        rule.pattern,
+                        Ambient(
+                            pattern = rule.pattern,
+                            color = rule.color,
+                            secondColor = rule.secondColor,
+                            speedMs = rule.speedMs,
+                            brightness = rule.brightness,
+                        ),
+                        active = rule.enabled,
+                        heightDp = 28,
+                    )
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FilledTonalButton(onClick = { onEdit(rule) }, modifier = Modifier.weight(1f)) {
-                        ButtonLabel(stringResource(R.string.common_edit))
-                    }
                     FilledTonalButton(onClick = { onTest(rule) }, modifier = Modifier.weight(1f)) {
                         ButtonLabel(stringResource(R.string.common_test))
+                    }
+                    FilledTonalButton(onClick = { onEdit(rule) }, modifier = Modifier.weight(1f)) {
+                        ButtonLabel(stringResource(R.string.common_edit))
                     }
                     TextButton(onClick = { onDelete(rule) }, modifier = Modifier.weight(1f)) {
                         ButtonLabel(stringResource(R.string.common_delete))

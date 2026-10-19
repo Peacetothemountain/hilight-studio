@@ -1,5 +1,6 @@
 package com.hilight.studio
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -12,27 +13,49 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.BrightnessHigh
+import androidx.compose.material.icons.rounded.Casino
+import androidx.compose.material.icons.rounded.Compress
+import androidx.compose.material.icons.rounded.ElectricBolt
+import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Flare
+import androidx.compose.material.icons.rounded.FlashOn
+import androidx.compose.material.icons.rounded.Gradient
+import androidx.compose.material.icons.rounded.Nightlight
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Radar
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Waves
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,21 +67,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import android.widget.Toast
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private fun interpolateGradientLeds(startColor: Int, endColor: Int): List<Int> {
@@ -76,25 +99,127 @@ private fun interpolateGradientLeds(startColor: Int, endColor: Int): List<Int> {
 /** The always-on look: pattern, colours, timing. */
 @Composable
 fun AmbientScreen(store: Store) {
+    val launchPreview = rememberPreviewLauncher(store)
     val ambient by store.ambient.collectAsStateWithLifecycle()
     val enabled by store.enabled.collectAsStateWithLifecycle()
+    val previewLook by store.previewLook.collectAsStateWithLifecycle()
     var editingLed by rememberSaveable { mutableIntStateOf(0) }
     var editingGradientStop by rememberSaveable { mutableIntStateOf(0) }
+    var lastActivePatternKey by rememberSaveable {
+        mutableStateOf(if (ambient.pattern != Pattern.OFF) ambient.pattern.key else Pattern.SOLID.key)
+    }
+    LaunchedEffect(ambient.pattern) {
+        if (ambient.pattern != Pattern.OFF) {
+            lastActivePatternKey = ambient.pattern.key
+        }
+    }
 
     PresetsCard(store)
 
     PixelCard(tone = 2) {
-        SectionTitle(stringResource(R.string.style_always_on_style))
-        HiLightDiffuserPreview(
-            pattern = ambient.pattern,
-            cfg = ambient,
-            active = enabled,
+        val displayedAmbient = previewLook ?: ambient
+        // 1. Studio Header Row: Title + Pattern/Brightness Pill Badge + Test on Visor Button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "Visor Style Studio",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = "${stringResource(displayedAmbient.pattern.shortLabelRes)} · ${(displayedAmbient.brightness * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            FilledTonalButton(
+                onClick = {
+                    val previewPattern = if (ambient.pattern == Pattern.OFF) {
+                        Pattern.of(lastActivePatternKey)
+                    } else {
+                        ambient.pattern
+                    }
+                    val look = ambient.copy(pattern = previewPattern)
+                    launchPreview(
+                        look.pattern,
+                        look.color,
+                        look.speedMs,
+                        look.brightness,
+                        2500,
+                        direction = look.direction,
+                        look = look,
+                    )
+                },
+                shape = CircleShape,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                Icon(
+                    Icons.Rounded.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                ButtonLabel("Test on Visor")
+            }
+        }
+
+        // 2. Dark-Elevated Studio Frame with Live HiLightDiffuserPreview
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(22.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.6f))
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f),
+                    RoundedCornerShape(22.dp),
+                )
+                .padding(horizontal = 10.dp, vertical = 12.dp),
+        ) {
+            HiLightDiffuserPreview(
+                pattern = displayedAmbient.pattern,
+                cfg = displayedAmbient,
+                active = displayedAmbient.pattern != Pattern.OFF,
+            )
+        }
+
+        // 3. Keep Lit Toggle Row
+        val isKeepLit = ambient.pattern != Pattern.OFF
+        PixelToggleRow(
+            title = stringResource(R.string.style_always_on_style),
+            subtitle = if (isKeepLit) null else stringResource(R.string.style_off_body),
+            checked = isKeepLit,
+            onChange = { keepLit ->
+                val targetPattern = if (keepLit) Pattern.of(lastActivePatternKey) else Pattern.OFF
+                store.setAmbient(ambient.copy(pattern = targetPattern))
+            },
         )
+
+        // 4. 2-Column Expressive Pattern Studio Grid
         PatternCarousel(
             selected = ambient.pattern,
-            options = Pattern.entries,
-            onSelect = { store.setAmbient(ambient.copy(pattern = it)) },
+            options = Pattern.entries.filter { it != Pattern.OFF },
+            onSelect = {
+                lastActivePatternKey = it.key
+                store.setAmbient(ambient.copy(pattern = it))
+            },
         )
+
         if (!enabled) {
             Text(
                 stringResource(R.string.style_control_off_warning),
@@ -561,58 +686,181 @@ private fun shareText(ctx: android.content.Context, text: String) {
     }
 }
 
-/** Scrolling pattern picker whose selection animates in colour and size. */
+private fun patternStudioIcon(pattern: Pattern): ImageVector = when (pattern) {
+    Pattern.SOLID -> Icons.Rounded.BrightnessHigh
+    Pattern.GRADIENT -> Icons.Rounded.Gradient
+    Pattern.CUSTOM -> Icons.Rounded.Tune
+    Pattern.BREATHE -> Icons.Rounded.Nightlight
+    Pattern.BLINK -> Icons.Rounded.FlashOn
+    Pattern.PULSE -> Icons.Rounded.Bolt
+    Pattern.WAVE -> Icons.Rounded.Waves
+    Pattern.CHASE -> Icons.Rounded.Sync
+    Pattern.COMET -> Icons.Rounded.Flare
+    Pattern.BOUNCE -> Icons.Rounded.SwapHoriz
+    Pattern.RADAR -> Icons.Rounded.Radar
+    Pattern.CONVERGE -> Icons.Rounded.Compress
+    Pattern.HEARTBEAT -> Icons.Rounded.Favorite
+    Pattern.GLITCH -> Icons.Rounded.ElectricBolt
+    Pattern.STROBE -> Icons.Rounded.FlashOn
+    Pattern.RAINBOW -> Icons.Rounded.AutoAwesome
+    Pattern.RANDOM -> Icons.Rounded.Casino
+    Pattern.METER -> Icons.Rounded.Equalizer
+    Pattern.OFF -> Icons.Rounded.BrightnessHigh
+}
+
+@Composable
+private fun patternStudioCaption(pattern: Pattern): String = when (pattern) {
+    Pattern.SOLID -> "Steady continuous illumination across the visor"
+    Pattern.GRADIENT -> "Smooth two-stop linear blend across all 8 LEDs"
+    Pattern.CUSTOM -> stringResource(R.string.style_per_led_hint)
+    Pattern.RANDOM -> "Generative shifting hues across the array"
+    Pattern.OFF -> stringResource(R.string.style_off_body)
+    else -> pattern.cycleMeaningRes?.let { stringResource(it) } ?: stringResource(pattern.labelRes)
+}
+
+/** 2-Column Expressive Pattern Studio Grid with glowing icon badges and animated selection. */
 @Composable
 fun PatternCarousel(
     selected: Pattern,
-    options: List<Pattern>,
+    options: List<Pattern> = Pattern.entries.filter { it != Pattern.OFF },
     onSelect: (Pattern) -> Unit,
 ) {
-    val listState = rememberLazyListState()
-
-    // keep the current pattern on screen, including when it is restored from settings
-    LaunchedEffect(selected, options) {
-        val index = options.indexOf(selected)
-        if (index >= 0) listState.animateScrollToItem(index, scrollOffset = -120)
+    val rows = remember(options) {
+        options.filter { it != Pattern.OFF }.chunked(2)
     }
+    val view = androidx.compose.ui.platform.LocalView.current
 
-    LazyRow(
-        state = listState,
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(options, key = { it.key }) { p ->
-            val isSelected = p == selected
-            val bg by animateColorAsState(
-                if (isSelected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceContainerHighest,
-                label = "chipBg",
-            )
-            val fg by animateColorAsState(
-                if (isSelected) MaterialTheme.colorScheme.onPrimary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-                label = "chipFg",
-            )
-            val scale by animateFloatAsState(
-                if (isSelected) 1.05f else 1f,
-                spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
-                label = "chipScale",
-            )
-            val view = androidx.compose.ui.platform.LocalView.current
-            Box(
-                Modifier
-                    .scale(scale)
-                    .background(bg, CircleShape)
-                    .clickable(role = androidx.compose.ui.semantics.Role.Button) {
-                        PixelHaptics.click(view)
-                        onSelect(p)
-                    }
-                    .padding(horizontal = 18.dp, vertical = 11.dp),
+        rows.forEach { rowPatterns ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(stringResource(p.labelRes), style = MaterialTheme.typography.labelLarge, color = fg)
+                rowPatterns.forEach { p ->
+                    val isSelected = p == selected
+                    val cardShape = RoundedCornerShape(20.dp)
+                    val bg by animateColorAsState(
+                        if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        label = "patternCardBg",
+                    )
+                    val borderColor by animateColorAsState(
+                        if (isSelected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f),
+                        label = "patternCardBorder",
+                    )
+                    val titleColor by animateColorAsState(
+                        if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurface,
+                        label = "patternTitleColor",
+                    )
+                    val captionColor by animateColorAsState(
+                        if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.80f)
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        label = "patternCaptionColor",
+                    )
+                    val iconTint by animateColorAsState(
+                        if (isSelected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        label = "patternIconTint",
+                    )
+                    val scale by animateFloatAsState(
+                        if (isSelected) 1.02f else 1f,
+                        spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                        label = "patternCardScale",
+                    )
+                    val glowColor = MaterialTheme.colorScheme.primary
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .scale(scale)
+                            .clip(cardShape)
+                            .background(bg, cardShape)
+                            .border(
+                                width = if (isSelected) 1.8.dp else 1.dp,
+                                color = borderColor,
+                                shape = cardShape,
+                            )
+                            .clickable(role = Role.Button) {
+                                PixelHaptics.click(view)
+                                onSelect(p)
+                            }
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .then(
+                                        if (isSelected) {
+                                            Modifier.drawBehind {
+                                                drawCircle(
+                                                    brush = Brush.radialGradient(
+                                                        colors = listOf(
+                                                            glowColor.copy(alpha = 0.36f),
+                                                            glowColor.copy(alpha = 0.10f),
+                                                            Color.Transparent,
+                                                        ),
+                                                        center = center,
+                                                        radius = size.minDimension * 0.72f,
+                                                    )
+                                                )
+                                            }
+                                        } else Modifier
+                                    )
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
+                                        else MaterialTheme.colorScheme.surfaceContainerHigh
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                                        CircleShape,
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = patternStudioIcon(p),
+                                    contentDescription = null,
+                                    tint = iconTint,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            Text(
+                                text = stringResource(p.labelRes),
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = titleColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Text(
+                            text = patternStudioCaption(p),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = captionColor,
+                            maxLines = 2,
+                            minLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (rowPatterns.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
             }
         }
     }

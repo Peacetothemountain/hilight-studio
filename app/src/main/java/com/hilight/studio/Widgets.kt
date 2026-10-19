@@ -2,9 +2,16 @@ package com.hilight.studio
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,10 +35,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.RestartAlt
-import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -52,11 +59,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -113,9 +127,15 @@ internal fun rememberPreviewLauncher(store: Store): PreviewLauncher {
     }
 }
 
+private enum class InlineColorStudioMode {
+    SPECTRUM,
+    TEMPERATURE_K,
+}
+
 /**
- * Swatches plus hue / saturation / intensity, enhanced with Material 3 Expressive
- * Color Spectrum Wheel launcher, Planckian Kelvin CCT quick presets, and live Hex pill.
+ * Swatches plus hue / saturation / intensity, enhanced with TileDialog-style Dual Luminous
+ * Controls (Color Wheel Stencil Filter button + White/Temperature Auto-Select circle),
+ * inline Spectrum | Temperature (K) studio, and live Hex pill with Reset.
  */
 @Composable
 fun ColorPicker(
@@ -133,9 +153,60 @@ fun ColorPicker(
         retainedHue = hsv[0]
     }
     val view = LocalView.current
-    var showWheelDialog by remember { mutableStateOf(false) }
-    var showCctRow by remember { mutableStateOf(false) }
-    var selectedKelvin by remember { mutableIntStateOf(4000) }
+    var showStudio by remember { mutableStateOf(false) }
+    var studioMode by remember { mutableStateOf(InlineColorStudioMode.SPECTRUM) }
+    var selectedKelvin by remember { mutableIntStateOf(4500) }
+    var whiteTempColor by remember { mutableIntStateOf(TileDialogActivity.kelvinToRgb(4500)) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "colorPickerLuminous")
+    val spinAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "spinAngle",
+    )
+    val shimmerPulse by infiniteTransition.animateFloat(
+        initialValue = 0.65f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "shimmerPulse",
+    )
+
+    val selectedColor = Color(color)
+    val goldGlow = Color(0xFFFFDF73)
+    val isWhiteSelected = (color == whiteTempColor) && !showStudio
+
+    val rainbowBrush = remember {
+        Brush.sweepGradient(
+            listOf(
+                Color.Red, Color.Yellow, Color.Green,
+                Color.Cyan, Color.Blue, Color.Magenta, Color.Red,
+            )
+        )
+    }
+    val colorWheelSpinBrush = Brush.sweepGradient(
+        0.0f to selectedColor.copy(alpha = 0.98f * shimmerPulse),
+        0.18f to selectedColor.copy(alpha = 0.85f * shimmerPulse),
+        0.40f to selectedColor.copy(alpha = 0.35f * shimmerPulse),
+        0.65f to Color.Transparent,
+        0.82f to selectedColor.copy(alpha = 0.50f * shimmerPulse),
+        1.0f to selectedColor.copy(alpha = 0.98f * shimmerPulse),
+    )
+    val goldShimmerBrush = Brush.sweepGradient(
+        0.0f to Color(0xFFFFF9E6).copy(alpha = 0.98f * shimmerPulse),
+        0.18f to goldGlow.copy(alpha = 0.85f * shimmerPulse),
+        0.40f to Color(0xFFFFB300).copy(alpha = 0.35f * shimmerPulse),
+        0.65f to Color.Transparent,
+        0.82f to goldGlow.copy(alpha = 0.50f * shimmerPulse),
+        1.0f to Color(0xFFFFF9E6).copy(alpha = 0.98f * shimmerPulse),
+    )
+
     val hueBrush = remember {
         Brush.horizontalGradient((0..6).map { Color(Renderer.hsv(it * 60f)) })
     }
@@ -144,7 +215,7 @@ fun ColorPicker(
             listOf(
                 Color(TileDialogActivity.kelvinToRgb(2000)),
                 Color(TileDialogActivity.kelvinToRgb(3000)),
-                Color(TileDialogActivity.kelvinToRgb(4000)),
+                Color(TileDialogActivity.kelvinToRgb(4500)),
                 Color(TileDialogActivity.kelvinToRgb(5500)),
                 Color(TileDialogActivity.kelvinToRgb(7000)),
             )
@@ -163,12 +234,167 @@ fun ColorPicker(
                 modifier = Modifier.weight(1f, fill = false),
             )
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 1. Color Wheel Dialog Chip
-                Row(
+                // 1. Color Wheel Stencil Filter Button (36.dp)
+                val wheelScale by animateFloatAsState(
+                    targetValue = if (showStudio) 1.08f else 1.0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                    label = "wheelScale",
+                )
+                Box(
                     modifier = Modifier
+                        .scale(wheelScale)
+                        .size(36.dp)
+                        .then(
+                            if (showStudio) {
+                                Modifier.drawBehind {
+                                    val radius = size.minDimension / 2f
+                                    val ringRadius = radius + 3.5.dp.toPx()
+                                    drawCircle(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(
+                                                selectedColor.copy(alpha = 0.40f * shimmerPulse),
+                                                selectedColor.copy(alpha = 0.12f * shimmerPulse),
+                                                Color.Transparent,
+                                            ),
+                                            center = center,
+                                            radius = ringRadius + 8.dp.toPx(),
+                                        )
+                                    )
+                                    rotate(spinAngle) {
+                                        drawCircle(
+                                            brush = colorWheelSpinBrush,
+                                            radius = ringRadius,
+                                            center = center,
+                                            style = Stroke(
+                                                width = 2.5.dp.toPx(),
+                                                cap = StrokeCap.Round,
+                                            ),
+                                        )
+                                    }
+                                }
+                            } else Modifier
+                        )
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .then(
+                            if (!showStudio) {
+                                Modifier.border(
+                                    width = 1.5.dp,
+                                    brush = rainbowBrush,
+                                    shape = CircleShape,
+                                )
+                            } else {
+                                Modifier.border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                    shape = CircleShape,
+                                )
+                            }
+                        )
+                        .clickable(role = Role.Button) {
+                            PixelHaptics.click(view)
+                            showStudio = !showStudio
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Rounded.ColorLens,
+                        contentDescription = "Color Studio",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(19.dp)
+                            .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                            .drawWithCache {
+                                val filterLightBrush = Brush.radialGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.98f),
+                                        selectedColor.copy(alpha = 0.95f),
+                                        selectedColor,
+                                        selectedColor.copy(alpha = 0.65f),
+                                    ),
+                                    center = Offset(size.width * 0.45f, size.height * 0.40f),
+                                    radius = size.minDimension * 0.85f,
+                                )
+                                onDrawWithContent {
+                                    drawContent()
+                                    drawRect(brush = filterLightBrush, blendMode = BlendMode.SrcIn)
+                                }
+                            },
+                    )
+                }
+
+                // 2. White / Temperature Auto-Select Circle (36.dp)
+                val whiteScale by animateFloatAsState(
+                    targetValue = if (isWhiteSelected) 1.08f else 1.0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                    label = "whiteScale",
+                )
+                Box(
+                    modifier = Modifier
+                        .scale(whiteScale)
+                        .size(36.dp)
+                        .drawBehind {
+                            val radius = size.minDimension / 2f
+                            val ringRadius = radius + 3.5.dp.toPx()
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        goldGlow.copy(alpha = (if (isWhiteSelected) 0.42f else 0.24f) * shimmerPulse),
+                                        goldGlow.copy(alpha = 0.10f * shimmerPulse),
+                                        Color.Transparent,
+                                    ),
+                                    center = center,
+                                    radius = ringRadius + 8.dp.toPx(),
+                                )
+                            )
+                            if (isWhiteSelected) {
+                                rotate(spinAngle) {
+                                    drawCircle(
+                                        brush = goldShimmerBrush,
+                                        radius = ringRadius,
+                                        center = center,
+                                        style = Stroke(
+                                            width = 2.5.dp.toPx(),
+                                            cap = StrokeCap.Round,
+                                        ),
+                                    )
+                                }
+                            }
+                        }
+                        .clip(CircleShape)
+                        .background(Color(whiteTempColor))
+                        .border(
+                            width = if (isWhiteSelected) 2.dp else 1.2.dp,
+                            color = goldGlow.copy(alpha = if (isWhiteSelected) 0.90f * shimmerPulse else 0.55f),
+                            shape = CircleShape,
+                        )
+                        .clickable(role = Role.Button) {
+                            PixelHaptics.click(view)
+                            onColor(whiteTempColor)
+                            showStudio = false
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // Clean pure illuminated circle — no dot inside
+                }
+
+                // 3. Compact Hex Pill + Reset Button
+                HexColorPill(
+                    color = color,
+                    onColorChanged = onColor,
+                )
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                         .border(
@@ -178,70 +404,25 @@ fun ColorPicker(
                         )
                         .clickable(role = Role.Button) {
                             PixelHaptics.click(view)
-                            showWheelDialog = true
-                        }
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            selectedKelvin = 4500
+                            whiteTempColor = TileDialogActivity.kelvinToRgb(4500)
+                            onColor(0xFFFFFFFF.toInt())
+                        },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        Icons.Rounded.ColorLens,
-                        contentDescription = null,
-                        tint = Color(color),
-                        modifier = Modifier.size(15.dp),
-                    )
-                    Text(
-                        "Wheel",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface,
+                        Icons.Rounded.RestartAlt,
+                        contentDescription = "Reset Color",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
                     )
                 }
-
-                // 2. Kelvin CCT Temperature Toggle Chip
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(
-                            if (showCctRow) MaterialTheme.colorScheme.secondaryContainer
-                            else MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
-                            CircleShape,
-                        )
-                        .clickable(role = Role.Button) {
-                            PixelHaptics.click(view)
-                            showCctRow = !showCctRow
-                        }
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(
-                        Icons.Rounded.WbSunny,
-                        contentDescription = null,
-                        tint = if (showCctRow) MaterialTheme.colorScheme.onSecondaryContainer else Color(0xFFFFD54F),
-                        modifier = Modifier.size(15.dp),
-                    )
-                    Text(
-                        "CCT",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = if (showCctRow) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-
-                // 3. Compact Hex / Swatch Badge
-                HexColorPill(
-                    color = color,
-                    onColorChanged = onColor,
-                )
             }
         }
 
-        // Expandable Kelvin CCT Quick Presets & Blackbody Strip
+        // Expandable Inline Spectrum | Temperature (K) Studio
         AnimatedVisibility(
-            visible = showCctRow,
+            visible = showStudio,
             enter = fadeIn() + expandVertically(spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow)),
             exit = fadeOut() + shrinkVertically(spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow)),
         ) {
@@ -250,71 +431,153 @@ fun ColorPicker(
                     .fillMaxWidth()
                     .background(
                         MaterialTheme.colorScheme.surfaceContainerHigh,
-                        MaterialTheme.shapes.medium,
+                        RoundedCornerShape(22.dp),
                     )
-                    .padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                        RoundedCornerShape(22.dp),
+                    )
+                    .padding(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // Mode Switcher: Spectrum | Temperature (K)
                 Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    listOf(2700 to "2700K", 4000 to "4000K", 5500 to "5500K", 6500 to "6500K").forEach { (k, kLabel) ->
-                        val kColor = TileDialogActivity.kelvinToRgb(k)
-                        val isSelected = selectedKelvin == k && color == kColor
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isSelected) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
-                                .clickable(role = Role.Button) {
-                                    PixelHaptics.click(view)
-                                    selectedKelvin = k
-                                    onColor(kColor)
-                                }
-                                .padding(vertical = 6.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = kLabel,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                ),
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color(kColor),
-                            )
-                        }
+                    val isSpectrum = studioMode == InlineColorStudioMode.SPECTRUM
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (isSpectrum) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable(role = Role.Button) {
+                                PixelHaptics.click(view)
+                                studioMode = InlineColorStudioMode.SPECTRUM
+                            }
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "Spectrum",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (isSpectrum) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    val isTemp = studioMode == InlineColorStudioMode.TEMPERATURE_K
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (isTemp) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable(role = Role.Button) {
+                                PixelHaptics.click(view)
+                                studioMode = InlineColorStudioMode.TEMPERATURE_K
+                                val c = TileDialogActivity.kelvinToRgb(selectedKelvin)
+                                whiteTempColor = c
+                                onColor(c)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = "Temperature (K)",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (isTemp) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(34.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
+
+                if (studioMode == InlineColorStudioMode.SPECTRUM) {
+                    ColorSpectrumWheel(
+                        color = color,
+                        onColorChanged = onColor,
+                        sizeDp = 200,
+                    )
+                } else {
+                    val kelvinColor = Color(TileDialogActivity.kelvinToRgb(selectedKelvin))
+                    Text(
+                        text = "$selectedKelvin K",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = kelvinColor,
+                    )
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .height(16.dp)
-                            .padding(horizontal = 6.dp)
-                            .background(cctBrush, CircleShape)
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f), CircleShape)
-                    )
-                    Slider(
-                        value = selectedKelvin.toFloat(),
-                        valueRange = 2000f..7000f,
-                        onValueChange = { k ->
-                            selectedKelvin = k.roundToInt()
-                            onColor(TileDialogActivity.kelvinToRgb(selectedKelvin))
-                        },
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color(TileDialogActivity.kelvinToRgb(selectedKelvin)),
-                            activeTrackColor = Color.Transparent,
-                            inactiveTrackColor = Color.Transparent,
-                        ),
-                    )
+                            .height(36.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(20.dp)
+                                .padding(horizontal = 6.dp)
+                                .background(cctBrush, CircleShape)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), CircleShape)
+                        )
+                        Slider(
+                            value = selectedKelvin.toFloat(),
+                            valueRange = 2000f..7000f,
+                            onValueChange = { k ->
+                                selectedKelvin = k.roundToInt()
+                                val c = TileDialogActivity.kelvinToRgb(selectedKelvin)
+                                whiteTempColor = c
+                                onColor(c)
+                            },
+                            colors = SliderDefaults.colors(
+                                thumbColor = kelvinColor,
+                                activeTrackColor = Color.Transparent,
+                                inactiveTrackColor = Color.Transparent,
+                            ),
+                        )
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(
+                            2700 to "Warm 2700K",
+                            4500 to "Neutral 4500K",
+                            6500 to "Cool 6500K",
+                        ).forEach { (k, kLabel) ->
+                            val kColor = TileDialogActivity.kelvinToRgb(k)
+                            val isSelected = selectedKelvin == k && color == kColor
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSelected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.surfaceContainerHighest
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) MaterialTheme.colorScheme.primary
+                                        else Color(kColor).copy(alpha = 0.45f),
+                                        CircleShape,
+                                    )
+                                    .clickable(role = Role.Button) {
+                                        PixelHaptics.click(view)
+                                        selectedKelvin = k
+                                        whiteTempColor = kColor
+                                        onColor(kColor)
+                                    }
+                                    .padding(vertical = 7.dp, horizontal = 6.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = kLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                                    ),
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color(kColor),
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -392,14 +655,6 @@ fun ColorPicker(
         PixelSlider(stringResource(R.string.widget_intensity), hsv[2], 0.05f..1f, { v ->
             onColor(android.graphics.Color.HSVToColor(floatArrayOf(retainedHue, hsv[1], v)))
         }) { stringResource(R.string.widget_percent, (it * 100).toInt()) }
-    }
-
-    if (showWheelDialog) {
-        ColorSpectrumDialog(
-            initialColor = color,
-            onDismiss = { showWheelDialog = false },
-            onColorSelected = onColor,
-        )
     }
 }
 
@@ -485,13 +740,24 @@ fun ColorSpectrumWheel(
             .pointerInput(outerInsetPx) {
                 detectTapGestures { offset: Offset ->
                     PixelHaptics.click(view)
-                    updateColorFromOffset(
-                        offset = offset,
-                        viewSize = size.width.toFloat(),
-                        outerInsetPx = outerInsetPx,
-                        value = currentV,
-                        onColorChanged = currentOnColorChanged,
-                    )
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
+                    val outerRadius = (minOf(size.width, size.height) / 2f - outerInsetPx).coerceAtLeast(1f)
+                    val innerRadius = outerRadius * 0.48f
+                    val dx = offset.x - cx
+                    val dy = offset.y - cy
+                    val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+                    if (dist <= innerRadius * 0.85f) {
+                        currentOnColorChanged(0xFFFFFFFF.toInt())
+                    } else {
+                        updateColorFromOffset(
+                            offset = offset,
+                            viewSize = size.width.toFloat(),
+                            outerInsetPx = outerInsetPx,
+                            value = currentV,
+                            onColorChanged = currentOnColorChanged,
+                        )
+                    }
                 }
             }
     ) {
@@ -722,6 +988,10 @@ fun ColorSpectrumDialog(
     val hsv = remember(currentColor) {
         FloatArray(3).also { android.graphics.Color.colorToHSV(currentColor, it) }
     }
+    var retainedHue by remember { androidx.compose.runtime.mutableFloatStateOf(hsv[0]) }
+    if (hsv[1] > 0.001f) {
+        retainedHue = hsv[0]
+    }
 
     val flashlightPresets = remember {
         listOf(
@@ -788,7 +1058,7 @@ fun ColorSpectrumDialog(
                     value = hsv[2],
                     range = 0.05f..1f,
                     onChange = { v: Float ->
-                        currentColor = android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], hsv[1], v))
+                        currentColor = android.graphics.Color.HSVToColor(floatArrayOf(retainedHue, hsv[1], v))
                     },
                 ) { stringResource(R.string.widget_percent, (it * 100).toInt()) }
 

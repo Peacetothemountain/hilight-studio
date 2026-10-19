@@ -15,7 +15,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,9 +26,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
@@ -47,7 +60,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
@@ -56,6 +74,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -249,6 +268,15 @@ fun SetupScreen(store: Store) {
         }
     }
 
+    EngineTransportHeroCard(
+        ctx = ctx,
+        store = store,
+        status = status,
+        transport = transport,
+        active = active,
+        onPostSelfTest = postSelfTest,
+    )
+
     val attribution = stringResource(R.string.setup_attribution)
     val attributionLink = stringResource(R.string.setup_attribution_external)
     PixelCard(
@@ -264,8 +292,9 @@ fun SetupScreen(store: Store) {
     }
 
     PixelCard(tone = 2) {
-        SectionTitle(
-            stringResource(R.string.setup_auto_off_title),
+        SetupIconHeader(
+            icon = Icons.Rounded.Security,
+            title = stringResource(R.string.setup_auto_off_title),
             trailing = { Caption(formatDuration(timeoutMs)) },
         )
         Caption(stringResource(R.string.setup_auto_off_body))
@@ -286,8 +315,9 @@ fun SetupScreen(store: Store) {
     }
 
     PixelCard {
-        SectionTitle(
-            stringResource(R.string.setup_glow_conditions_title),
+        SetupIconHeader(
+            icon = Icons.Rounded.Bolt,
+            title = stringResource(R.string.setup_glow_conditions_title),
             trailing = {
                 glowSuppression?.let { LivePill(stringResource(it.shortRes), ok = false) }
             },
@@ -336,8 +366,9 @@ fun SetupScreen(store: Store) {
     }
 
     PixelCard {
-        SectionTitle(
-            stringResource(R.string.setup_pause_conditions_title),
+        SetupIconHeader(
+            icon = Icons.Rounded.Schedule,
+            title = stringResource(R.string.setup_pause_conditions_title),
             trailing = {
                 pauseSuppression?.let { LivePill(stringResource(it.shortRes), ok = false) }
             },
@@ -428,8 +459,9 @@ fun SetupScreen(store: Store) {
     val rendererConnected = store.isRendererConnectedForUi(status)
     if (rootPresent) {
         PixelCard(tone = 2) {
-            SectionTitle(
-                stringResource(R.string.setup_root_title),
+            SetupIconHeader(
+                icon = Icons.Rounded.Security,
+                title = stringResource(R.string.setup_root_title),
                 trailing = {
                     LivePill(
                         stringResource(
@@ -463,7 +495,10 @@ fun SetupScreen(store: Store) {
         }
     } else {
         PixelCard(tone = 2) {
-            SectionTitle(stringResource(R.string.setup_privileged_title))
+            SetupIconHeader(
+                icon = Icons.Rounded.Security,
+                title = stringResource(R.string.setup_privileged_title),
+            )
             Caption(stringResource(R.string.setup_privileged_body))
             val selectable = listOf(Transport.AUTO, Transport.SHIZUKU, Transport.ADB)
             val transportLabels = selectable.associateWith { stringResource(it.labelRes) }
@@ -504,8 +539,9 @@ fun SetupScreen(store: Store) {
     }
 
     PixelCard {
-        SectionTitle(
-            stringResource(R.string.setup_notif_title),
+        SetupIconHeader(
+            icon = Icons.Rounded.NotificationsActive,
+            title = stringResource(R.string.setup_notif_title),
             trailing = {
                 LivePill(
                     stringResource(
@@ -541,8 +577,9 @@ fun SetupScreen(store: Store) {
     }
 
     PixelCard {
-        SectionTitle(
-            stringResource(R.string.setup_usage_title),
+        SetupIconHeader(
+            icon = Icons.Rounded.Security,
+            title = stringResource(R.string.setup_usage_title),
             trailing = {
                 LivePill(
                     stringResource(
@@ -559,15 +596,19 @@ fun SetupScreen(store: Store) {
     }
 
     PixelCard {
-        SectionTitle(stringResource(R.string.setup_appearance_title))
+        SetupIconHeader(
+            icon = Icons.Rounded.Tune,
+            title = stringResource(R.string.setup_appearance_title),
+        )
         ToggleRow(stringResource(R.string.setup_wallpaper_colours), dynamicColor) {
             store.setDynamicColor(it)
         }
     }
 
     PixelCard {
-        SectionTitle(
-            stringResource(R.string.setup_updates_title),
+        SetupIconHeader(
+            icon = Icons.Rounded.SystemUpdate,
+            title = stringResource(R.string.setup_updates_title),
             trailing = {
                 Caption(
                     stringResource(
@@ -644,7 +685,10 @@ fun SetupScreen(store: Store) {
     }
 
     PixelCard {
-        SectionTitle(stringResource(R.string.setup_test_title))
+        SetupIconHeader(
+            icon = Icons.Rounded.NotificationsActive,
+            title = stringResource(R.string.setup_test_title),
+        )
         Caption(stringResource(R.string.setup_test_body))
         selfTestWarning?.let { Caption(it) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -694,7 +738,10 @@ fun SetupScreen(store: Store) {
     }
 
     PixelCard(tone = 2) {
-        SectionTitle(stringResource(R.string.setup_led_diagnostics_title))
+        SetupIconHeader(
+            icon = Icons.Rounded.Terminal,
+            title = stringResource(R.string.setup_led_diagnostics_title),
+        )
         Caption(stringResource(R.string.setup_led_diagnostics_body))
         FilledTonalButton(
             onClick = {
@@ -745,7 +792,10 @@ fun SetupScreen(store: Store) {
     }
 
     PixelCard {
-        SectionTitle(stringResource(R.string.setup_priority_title))
+        SetupIconHeader(
+            icon = Icons.Rounded.Tune,
+            title = stringResource(R.string.setup_priority_title),
+        )
         Caption(stringResource(R.string.setup_priority_body))
         PixelSlider(
             stringResource(R.string.setup_priority_label),
@@ -791,12 +841,186 @@ fun SetupScreen(store: Store) {
 }
 
 @Composable
+private fun EngineTransportHeroCard(
+    ctx: Context,
+    store: Store,
+    status: HelperStatus,
+    transport: Transport,
+    active: Transport,
+    onPostSelfTest: () -> Unit,
+) {
+    val onlineAccent = Color(0xFF4ADE80)
+    val offlineAccent = MaterialTheme.colorScheme.tertiary
+    val orbColor = if (status.alive) onlineAccent else offlineAccent
+
+    PixelCard(tone = 2) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                orbColor.copy(alpha = 0.34f),
+                                orbColor.copy(alpha = 0.10f),
+                            )
+                        )
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = orbColor.copy(alpha = 0.55f),
+                        shape = CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (status.alive) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber,
+                    contentDescription = null,
+                    tint = orbColor,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = if (status.alive) "HiLight Engine Connected" else "HiLight Engine Disconnected",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = if (status.alive) {
+                        "${stringResource(active.labelRes)} · PID ${status.pid} · ${status.ledCount} LEDs Ready"
+                    } else {
+                        "${stringResource(transport.labelRes)} · Select Root, Shizuku, or Wireless ADB below to start the hardware daemon"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            LivePill(
+                text = if (status.alive) "ONLINE" else "OFFLINE",
+                ok = status.alive,
+            )
+        }
+
+        if (status.alive) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                FilledTonalButton(
+                    onClick = {
+                        store.preview(
+                            pattern = Pattern.RAINBOW,
+                            color = 0xFFFFFFFF.toInt(),
+                            speedMs = 2000,
+                            brightness = 1f,
+                        )
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    ButtonLabel("Test 8-LED Array")
+                }
+                OutlinedButton(
+                    onClick = onPostSelfTest,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(
+                        Icons.Rounded.NotificationsActive,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    ButtonLabel("Send Test Notification")
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilledTonalButton(onClick = store::retryRoot) {
+                    Icon(Icons.Rounded.Security, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    ButtonLabel("Retry Root")
+                }
+                FilledTonalButton(onClick = { store.shizuku.refresh() }) {
+                    Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    ButtonLabel("Refresh Shizuku")
+                }
+                OutlinedButton(onClick = { copy(ctx, ADB_COMMAND, R.string.adb_copied) }) {
+                    Icon(Icons.Rounded.Terminal, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    ButtonLabel("Copy ADB Command")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SetupIconHeader(
+    icon: ImageVector,
+    title: String,
+    accent: Color = MaterialTheme.colorScheme.primary,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            modifier = Modifier.weight(1f, fill = false),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.16f))
+                    .border(1.dp, accent.copy(alpha = 0.32f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        trailing?.invoke()
+    }
+}
+
+@Composable
 private fun ShizukuCard(store: Store, state: ShizukuBackend.State) {
     val ctx = LocalContext.current
     PixelCard {
         // The card is named after the transport it is about, so it uses that same name.
-        SectionTitle(
-            stringResource(R.string.transport_shizuku),
+        SetupIconHeader(
+            icon = Icons.Rounded.Security,
+            title = stringResource(R.string.transport_shizuku),
             trailing = {
                 val pill = when (state) {
                     ShizukuBackend.State.CONNECTED -> R.string.shizuku_state_connected
@@ -879,7 +1103,10 @@ private fun ShizukuCard(store: Store, state: ShizukuBackend.State) {
 @Composable
 private fun AdbCard(ctx: Context) {
     PixelCard {
-        SectionTitle(stringResource(R.string.adb_title))
+        SetupIconHeader(
+            icon = Icons.Rounded.Terminal,
+            title = stringResource(R.string.adb_title),
+        )
         Caption(stringResource(R.string.adb_body))
         Text(
             ADB_COMMAND,
@@ -913,7 +1140,10 @@ private fun AdbCard(ctx: Context) {
 @Composable
 fun QuickSettingsTileCard(ctx: Context) {
     PixelCard {
-        SectionTitle(stringResource(R.string.setup_qs_tile_title))
+        SetupIconHeader(
+            icon = Icons.Rounded.Tune,
+            title = stringResource(R.string.setup_qs_tile_title),
+        )
         Caption(stringResource(R.string.setup_qs_tile_body))
         FilledTonalButton(
             onClick = {
@@ -947,7 +1177,10 @@ fun QuickSettingsTileCard(ctx: Context) {
 @Composable
 fun WirelessAdbCard(ctx: Context) {
     PixelCard {
-        SectionTitle(stringResource(R.string.setup_wireless_adb_title))
+        SetupIconHeader(
+            icon = Icons.Rounded.Terminal,
+            title = stringResource(R.string.setup_wireless_adb_title),
+        )
         Caption(stringResource(R.string.setup_wireless_adb_body))
         FilledTonalButton(
             onClick = {

@@ -36,15 +36,16 @@ private val FallbackDark = darkColorScheme(
     secondaryContainer = Color(0xFF004E5A),
     onSecondaryContainer = Color(0xFFB0EDFB),
     tertiary = Color(0xFFFFB1C8),
-    background = Color(0xFF121116),
+    background = Color(0xFF0F0E13),
     onBackground = Color(0xFFE6E1E9),
-    surface = Color(0xFF121116),
+    surface = Color(0xFF0F0E13),
     onSurface = Color(0xFFE6E1E9),
     surfaceVariant = Color(0xFF48454E),
     onSurfaceVariant = Color(0xFFC9C5D0),
-    surfaceContainer = Color(0xFF1E1D22),
-    surfaceContainerHigh = Color(0xFF29282D),
-    surfaceContainerHighest = Color(0xFF343238),
+    surfaceContainerLow = Color(0xFF17161B),
+    surfaceContainer = Color(0xFF1E1D23),
+    surfaceContainerHigh = Color(0xFF28272E),
+    surfaceContainerHighest = Color(0xFF33313A),
     outline = Color(0xFF938F99),
     outlineVariant = Color(0xFF48454E),
 )
@@ -58,31 +59,33 @@ private val FallbackLight = lightColorScheme(
     secondaryContainer = Color(0xFFB0EDFB),
     background = Color(0xFFFEF7FF),
     surface = Color(0xFFFEF7FF),
+    surfaceContainerLow = Color(0xFFF7F2FA),
     surfaceContainer = Color(0xFFF2ECF4),
     surfaceContainerHigh = Color(0xFFECE6EE),
     surfaceContainerHighest = Color(0xFFE6E0E9),
 )
 
-/** Rounder than stock Material 3 — Pixel's system surfaces sit around 28-32dp. */
+/** Rounder than stock Material 3 — Pixel 11 Material 3 Expressive surfaces sit around 28-36dp. */
 private val PixelShapes = Shapes(
-    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+    extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
     small = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
     medium = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
     large = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
     extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(36.dp),
 )
 
-/** Slightly tighter tracking and heavier headlines, closer to Pixel's system typography. */
+/** Slightly tighter tracking and heavier headlines, closer to Pixel 11 system typography. */
 private val PixelTypography = Typography().let { base ->
     base.copy(
-        displaySmall = base.displaySmall.copy(fontWeight = FontWeight.Normal, letterSpacing = (-0.5).sp),
-        headlineLarge = base.headlineLarge.copy(fontWeight = FontWeight.Normal, letterSpacing = (-0.4).sp),
-        headlineMedium = base.headlineMedium.copy(fontWeight = FontWeight.Medium, letterSpacing = (-0.2).sp),
-        headlineSmall = base.headlineSmall.copy(fontWeight = FontWeight.Medium),
-        titleLarge = base.titleLarge.copy(fontWeight = FontWeight.Medium, letterSpacing = 0.sp),
-        titleMedium = base.titleMedium.copy(fontWeight = FontWeight.Medium),
-        titleSmall = base.titleSmall.copy(fontWeight = FontWeight.Medium),
-        labelLarge = base.labelLarge.copy(fontWeight = FontWeight.Medium, fontSize = 14.sp, letterSpacing = 0.1.sp),
+        displaySmall = base.displaySmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp),
+        headlineLarge = base.headlineLarge.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp),
+        headlineMedium = base.headlineMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
+        headlineSmall = base.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+        titleLarge = base.titleLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.15).sp),
+        titleMedium = base.titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.sp),
+        titleSmall = base.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+        labelLarge = base.labelLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, letterSpacing = 0.1.sp),
+        labelMedium = base.labelMedium.copy(fontWeight = FontWeight.Medium, letterSpacing = 0.15.sp),
         bodyMedium = base.bodyMedium.copy(lineHeight = 21.sp),
     )
 }
