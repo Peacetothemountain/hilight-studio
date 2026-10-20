@@ -54,7 +54,8 @@ public final class HiLightUserService extends IHiLightService.Stub {
         try {
             callingUid = android.os.Binder.getCallingUid();
         } catch (RuntimeException ignored) {
-            return true;
+            // An unidentifiable caller is not authorized to drive or stop a privileged renderer.
+            return false;
         }
         if (callingUid == ROOT_UID || callingUid == SHELL_UID) return true;
         try {

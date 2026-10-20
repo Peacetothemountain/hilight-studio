@@ -62,14 +62,11 @@ class RootCommandTest {
     }
 
     private val shellPath: String by lazy {
-        val candidates = listOf(
-            "bash",
-            "sh",
-            "C:/Users/caref/scoop/apps/git/current/bin/bash.exe",
-            "C:/Program Files/Git/bin/bash.exe",
-            "/bin/bash",
-            "/bin/sh",
-        )
+        // CI and Android-like hosts have bash on PATH. On Windows, Git for Windows supplies one; its
+        // install root comes from the environment rather than any one developer's machine.
+        val gitBash = listOfNotNull(System.getenv("ProgramFiles"), System.getenv("LOCALAPPDATA")?.let { "$it/Programs" })
+            .map { "$it/Git/bin/bash.exe" }
+        val candidates = listOf("bash") + gitBash + listOf("/bin/bash", "sh", "/bin/sh")
         candidates.firstOrNull { candidate ->
             try {
                 ProcessBuilder(candidate, "-c", "exit 0").start().waitFor() == 0

@@ -5,6 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeNoException;
+import static org.junit.Assume.assumeTrue;
 
 import java.io.File;
 import java.io.IOException;
@@ -82,6 +84,9 @@ public final class AdbHelperBridgeTargetTest {
 
     @Test
     public void singletonClaimRejectsOverlapAndIsKernelReleasedOnClose() throws Exception {
+        // The claim fails closed without POSIX permissions, which Windows hosts do not provide.
+        assumeTrue(java.nio.file.FileSystems.getDefault()
+                .supportedFileAttributeViews().contains("posix"));
         File lockFile = File.createTempFile("hilight-renderer-", ".lock");
         try {
             AdbHelper.SingletonClaim first = AdbHelper.SingletonClaim.acquire(lockFile);
@@ -111,8 +116,7 @@ public final class AdbHelperBridgeTargetTest {
             try {
                 Files.createSymbolicLink(link.toPath(), target.toPath());
             } catch (UnsupportedOperationException | java.nio.file.FileSystemException notSupported) {
-                // Host environment does not support/permit symlink creation
-                return;
+                assumeNoException("host cannot create symbolic links", notSupported);
             }
 
             assertThrows(

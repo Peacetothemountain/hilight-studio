@@ -128,10 +128,10 @@ class RootBackend(private val ctx: Context) : Backend {
     /** Starts only after Store has staged an output-disabled state with [stagedRevision]. */
     fun ensureStarted(stagedRevision: Long, onComplete: (Boolean) -> Unit) {
         synchronized(this) {
-            if (starting) {
-                main.post { onComplete(false) }
-                return
-            }
+            // The start already in flight owns the outcome and reports it through its own
+            // callback. Reporting "not started" here would let Store route output elsewhere while
+            // a root renderer is still coming up.
+            if (starting) return
             starting = true
         }
         attempt = RootAttemptDiagnostics(RootStartupPhase.PERMISSION)

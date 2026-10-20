@@ -47,11 +47,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.core.content.FileProvider
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.concurrent.atomic.AtomicBoolean
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -214,7 +209,7 @@ fun SetupScreen(store: Store) {
     var forgetting by remember { mutableStateOf(false) }
     var checkingForUpdates by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
-    var downloadingUpdate by remember { mutableStateOf(isDownloadingApk.get()) }
+    var downloadingUpdate by remember { mutableStateOf(UpdateInstaller.isDownloading) }
     var selfTestCountdown by remember { mutableIntStateOf(0) }
     var selfTestWarning by remember { mutableStateOf<String?>(null) }
     var confirmingFaceDown by remember { mutableStateOf(false) }
@@ -640,7 +635,7 @@ fun SetupScreen(store: Store) {
                 if (available.release.apkUrl != null) {
                     Button(
                         onClick = {
-                            downloadAndInstallApk(ctx, available.release.apkUrl) { downloadingUpdate = it }
+                            UpdateInstaller.downloadAndInstall(ctx, available.release.apkUrl) { downloadingUpdate = it }
                         },
                         enabled = !downloadingUpdate,
                     ) {
@@ -1234,91 +1229,6 @@ private fun openExternalUrl(ctx: Context, pageUrl: String) {
     val uri = Uri.parse(pageUrl)
     runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
         .onFailure { Toast.makeText(ctx, R.string.setup_no_browser, Toast.LENGTH_SHORT).show() }
-}
-
-private const val MAX_APK_BYTES = 64L * 1024 * 1024
-private val isDownloadingApk = AtomicBoolean(false)
-
-private fun downloadAndInstallApk(ctx: Context, apkUrl: String, onProgress: (Boolean) -> Unit) {
-    if (!isDownloadingApk.compareAndSet(false, true)) return
-    val appCtx = ctx.applicationContext
-    onProgress(true)
-    Thread {
-        var apkFile: File? = null
-        try {
-            val url = URL(apkUrl)
-            require(url.protocol.equals("https", ignoreCase = true)) { "HTTPS required" }
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15_000
-                readTimeout = 60_000
-            }
-            try {
-                connection.connect()
-                require(connection.responseCode in 200..299) {
-                    "HTTP ${connection.responseCode}"
-                }
-
-                val updateDir = File(appCtx.cacheDir, "updates").apply { mkdirs() }
-                val targetFile = File(updateDir, "HiLightStudioUpdate.apk")
-                apkFile = targetFile
-                if (targetFile.exists()) targetFile.delete()
-
-                connection.inputStream.use { input ->
-                    targetFile.outputStream().use { output ->
-                        val buffer = ByteArray(8192)
-                        var total = 0L
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            total += read
-                            if (total > MAX_APK_BYTES) {
-                                throw IllegalStateException("APK exceeds maximum size")
-                            }
-                            output.write(buffer, 0, read)
-                        }
-                    }
-                }
-
-                val archiveInfo = appCtx.packageManager.getPackageArchiveInfo(
-                    targetFile.absolutePath,
-                    android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES,
-                )
-                if (archiveInfo == null || archiveInfo.packageName != appCtx.packageName) {
-                    targetFile.delete()
-                    throw SecurityException("APK package mismatch")
-                }
-
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    isDownloadingApk.set(false)
-                    onProgress(false)
-                    try {
-                        val uri = FileProvider.getUriForFile(
-                            appCtx,
-                            "${appCtx.packageName}.provider",
-                            targetFile,
-                        )
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "application/vnd.android.package-archive")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        appCtx.startActivity(intent)
-                    } catch (e: Exception) {
-                        Toast.makeText(appCtx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            } finally {
-                connection.disconnect()
-            }
-        } catch (e: Exception) {
-            apkFile?.delete()
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                isDownloadingApk.set(false)
-                onProgress(false)
-                Toast.makeText(appCtx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }.start()
 }
 
 private fun postSelfTestNotification(ctx: Context) {

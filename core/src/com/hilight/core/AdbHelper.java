@@ -198,7 +198,8 @@ public final class AdbHelper {
                     path,
                     PosixFileAttributeView.class,
                     LinkOption.NOFOLLOW_LINKS);
-            if (view == null) return;
+            // Fail closed: a lock whose cross-UID mode cannot be set or verified must not be used.
+            if (view == null) throw new IOException("renderer lock has no POSIX permission view");
             try {
                 view.setPermissions(crossUid);
                 return;
