@@ -129,7 +129,7 @@ fun AmbientScreen(store: Store) {
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    text = "Visor Style Studio",
+                    text = stringResource(R.string.style_studio_title),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -140,7 +140,7 @@ fun AmbientScreen(store: Store) {
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text(
-                        text = "${stringResource(displayedAmbient.pattern.shortLabelRes)} · ${(displayedAmbient.brightness * 100).toInt()}%",
+                        text = stringResource(R.string.style_studio_badge, stringResource(displayedAmbient.pattern.shortLabelRes), (displayedAmbient.brightness * 100).toInt()),
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
@@ -174,7 +174,7 @@ fun AmbientScreen(store: Store) {
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(Modifier.width(6.dp))
-                ButtonLabel("Test on Visor")
+                ButtonLabel(stringResource(R.string.style_test_on_visor))
             }
         }
 
@@ -357,8 +357,8 @@ fun AmbientScreen(store: Store) {
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         listOf(
-                            0 to ("Start Color" to ambient.color),
-                            1 to ("End Color" to ambient.secondColor),
+                            0 to (R.string.style_gradient_start to ambient.color),
+                            1 to (R.string.style_gradient_end to ambient.secondColor),
                         ).forEach { (stopIndex, pair) ->
                             val (stopLabel, stopColor) = pair
                             val selected = editingGradientStop == stopIndex
@@ -394,7 +394,7 @@ fun AmbientScreen(store: Store) {
                                 )
                                 Column {
                                     Text(
-                                        text = stopLabel,
+                                        text = stringResource(stopLabel),
                                         style = MaterialTheme.typography.labelLarge,
                                         color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
                                         else MaterialTheme.colorScheme.onSurface,
@@ -421,7 +421,7 @@ fun AmbientScreen(store: Store) {
                                 )
                             )
                         },
-                        label = if (editingGradientStop == 0) "Start Color" else "End Color",
+                        label = stringResource(if (editingGradientStop == 0) R.string.style_gradient_start else R.string.style_gradient_end),
                     )
                     PixelSlider(
                         stringResource(R.string.style_rotate_around_array),
@@ -447,7 +447,7 @@ fun AmbientScreen(store: Store) {
                                 )
                             },
                             modifier = Modifier.weight(1f),
-                        ) { ButtonLabel("Sunset") }
+                        ) { ButtonLabel(stringResource(R.string.style_gradient_sunset)) }
                         FilledTonalButton(
                             onClick = {
                                 val s = 0xFF00E5FF.toInt()
@@ -461,7 +461,7 @@ fun AmbientScreen(store: Store) {
                                 )
                             },
                             modifier = Modifier.weight(1f),
-                        ) { ButtonLabel("Cyber") }
+                        ) { ButtonLabel(stringResource(R.string.style_gradient_cyber)) }
                         FilledTonalButton(
                             onClick = {
                                 val s = wallpaper.firstOrNull() ?: ambient.color
@@ -489,7 +489,7 @@ fun AmbientScreen(store: Store) {
                                 )
                             },
                             modifier = Modifier.weight(1f),
-                        ) { ButtonLabel("Swap") }
+                        ) { ButtonLabel(stringResource(R.string.style_gradient_swap)) }
                     }
                 }
 
@@ -510,7 +510,7 @@ fun AmbientScreen(store: Store) {
 
                 else -> PixelCard {
                     SectionTitle(stringResource(R.string.style_colour))
-                    ColorPicker(ambient.color, { store.setAmbient(ambient.copy(color = it)) })
+                    ColorPicker(ambient.color, { store.setAmbient(ambient.copy(color = it)) }, label = null)
                 }
             }
 
@@ -710,10 +710,10 @@ private fun patternStudioIcon(pattern: Pattern): ImageVector = when (pattern) {
 
 @Composable
 private fun patternStudioCaption(pattern: Pattern): String = when (pattern) {
-    Pattern.SOLID -> "Steady continuous illumination across the visor"
-    Pattern.GRADIENT -> "Smooth two-stop linear blend across all 8 LEDs"
+    Pattern.SOLID -> stringResource(R.string.style_caption_solid)
+    Pattern.GRADIENT -> stringResource(R.string.style_caption_gradient)
     Pattern.CUSTOM -> stringResource(R.string.style_per_led_hint)
-    Pattern.RANDOM -> "Generative shifting hues across the array"
+    Pattern.RANDOM -> stringResource(R.string.style_caption_random)
     Pattern.OFF -> stringResource(R.string.style_off_body)
     else -> pattern.cycleMeaningRes?.let { stringResource(it) } ?: stringResource(pattern.labelRes)
 }

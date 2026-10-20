@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.border
@@ -226,7 +227,7 @@ fun AppRulesScreen(store: Store) {
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text(
-                        "${rules.count { it.enabled }} App Rules",
+                        rules.count { it.enabled }.let { pluralStringResource(R.plurals.rules_badge_apps, it, it) },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
@@ -237,7 +238,7 @@ fun AppRulesScreen(store: Store) {
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Text(
-                        "${privacyRules.count { it.enabled }} Privacy",
+                        privacyRules.count { it.enabled }.let { pluralStringResource(R.plurals.rules_badge_privacy, it, it) },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
@@ -822,7 +823,7 @@ private fun RuleCard(
             }
             if (onCopy != null) {
                 FilledTonalButton(onClick = onCopy, modifier = Modifier.weight(1f)) {
-                    ButtonLabel("Copy")
+                    ButtonLabel(stringResource(R.string.rules_copy))
                 }
             }
             TextButton(onClick = onDelete, modifier = Modifier.weight(1f)) {

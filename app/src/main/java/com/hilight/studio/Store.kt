@@ -438,6 +438,17 @@ class Store private constructor(private val app: Context) {
     private val _flashlightBrightness = MutableStateFlow(prefs.getFloat("flashlightBrightness", 1f))
     val flashlightBrightness: StateFlow<Float> = _flashlightBrightness.asStateFlow()
 
+    /** Last colour temperature picked, so the white button keeps it across launches. */
+    private val _flashlightKelvin = MutableStateFlow(
+        prefs.getInt("flashlightKelvin", FLASHLIGHT_DEFAULT_KELVIN)
+            .coerceIn(FLASHLIGHT_MIN_KELVIN, FLASHLIGHT_MAX_KELVIN)
+    )
+    val flashlightKelvin: StateFlow<Int> = _flashlightKelvin.asStateFlow()
+
+    /** The white button's colour: pure white until a temperature is chosen, then that tone. */
+    private val _flashlightWhite = MutableStateFlow(prefs.getInt("flashlightWhite", 0xFFFFFFFF.toInt()))
+    val flashlightWhite: StateFlow<Int> = _flashlightWhite.asStateFlow()
+
     private val _presets = MutableStateFlow(loadPresets())
     val presets: StateFlow<List<Preset>> = _presets.asStateFlow()
 
@@ -1751,6 +1762,28 @@ class Store private constructor(private val app: Context) {
         _flashlightColor.value = color
         prefs.edit().putInt("flashlightColor", color).apply()
         if (_flashlightActive.value) scheduleFlashlightPush()
+    }
+
+    /** One flashlight slider position: any visible level turns it on at that level, zero turns it off. */
+    fun applyFlashlightLevel(level: Float) {
+        if (level > 0.01f) {
+            setFlashlightBrightness(level)
+            if (!_flashlightActive.value) setFlashlight(true)
+        } else {
+            setFlashlight(false)
+        }
+    }
+
+    /** Picks a colour temperature: it becomes the white button's tone and the flashlight colour. */
+    fun setFlashlightKelvin(kelvin: Int) {
+        val k = kelvin.coerceIn(FLASHLIGHT_MIN_KELVIN, FLASHLIGHT_MAX_KELVIN)
+        val white = kelvinToRgb(k)
+        if (_flashlightKelvin.value != k || _flashlightWhite.value != white) {
+            _flashlightKelvin.value = k
+            _flashlightWhite.value = white
+            prefs.edit().putInt("flashlightKelvin", k).putInt("flashlightWhite", white).apply()
+        }
+        setFlashlightColor(white)
     }
 
     /** Sets the 8-LED Flashlight brightness level and persists it. */

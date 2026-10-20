@@ -68,8 +68,7 @@
     <string name="tile_label">HiLight</string>
     <string name="tile_no_renderer">No renderer</string>
     <string name="tile_off">Off</string>
-    <string name="tile_resting">Resting</string>
-    <string name="tile_timed_out">Timed out</string>
+    <string name="tile_on">On</string>
 
     <!-- The colour picker. widget_colour is the heading it falls back to when a caller does not name
          the colour it is editing; %1$d in widget_percent is a percentage of full. -->
@@ -77,44 +76,46 @@
     <string name="widget_saturation">Saturation</string>
     <string name="widget_intensity">Intensity</string>
     <string name="widget_percent">%1$d%%</string>
+    <string name="widget_reset_colour">Reset colour</string>
 
-    <!-- 8-LED Flashlight strings -->
-    <string name="live_flashlight_title">8-LED Flashlight</string>
-    <string name="live_flashlight_subtitle_on">Flashlight active · Hold for color wheel</string>
-    <string name="live_flashlight_subtitle_off">Tap to turn on · Hold for color wheel</string>
-    <string name="live_flashlight_color_select">Flashlight Color</string>
+    <!-- The Live tab's flashlight card. %1$d in live_flashlight_subtitle_on is a brightness percentage. -->
+    <string name="live_flashlight_title">HiLight Flashlight</string>
+    <string name="live_flashlight_subtitle_on">On · %1$d%%</string>
+    <string name="live_flashlight_subtitle_off">Off · Stays on for the Setup tab\'s auto-off time</string>
 
-    <!-- Google Pixel Native Stock Effects -->
-    <string name="live_effect_assistant">Assistant</string>
-    <string name="live_effect_timer">Timer</string>
-    <string name="live_effect_camera">Camera</string>
-    <string name="live_effect_battery">Battery</string>
-    <string name="live_effect_call">Call Alert</string>
-    <string name="live_effect_notify">Notify</string>
-    <string name="live_effect_wallpaper">Wallpaper</string>
-    <string name="live_effect_sunset">Sunset</string>
-    <string name="live_effect_cyber">Cyberpunk</string>
+    <!-- Flashlight controls shared by the Quick Settings dialog and the Live tab. -->
+    <string name="flashlight_dialog_title">Flashlight Strength</string>
+    <string name="flashlight_level_off">Off</string>
+    <string name="flashlight_level_percent">%1$d%%</string>
+    <string name="flashlight_torch">Flashlight</string>
+    <string name="flashlight_turn_off">Turn off</string>
+    <string name="flashlight_done">Done</string>
+    <string name="flashlight_color_wheel">Colour wheel</string>
+    <string name="flashlight_white">White</string>
+    <string name="flashlight_mode_spectrum">Spectrum</string>
+    <string name="flashlight_mode_temperature">Temperature (K)</string>
+    <!-- %1$d is a colour temperature in kelvin; %2$s is one of the flashlight_kelvin_* names. -->
+    <string name="flashlight_kelvin">%1$d K · %2$s</string>
+    <string name="flashlight_kelvin_preset">%1$dK</string>
+    <string name="flashlight_kelvin_candle">Candlelight</string>
+    <string name="flashlight_kelvin_warm">Warm Incandescent</string>
+    <string name="flashlight_kelvin_neutral">Neutral White</string>
+    <string name="flashlight_kelvin_daylight">Crisp Daylight</string>
+    <string name="flashlight_kelvin_cool">Cool Sky</string>
 
-    <!-- Studio Lighting, CCT & Practical Cinematography -->
-    <string name="live_studio_title">Studio Fill-Light &amp; CCT</string>
-    <string name="live_studio_caption">Planckian blackbody color temperature key light &amp; practical FX</string>
-    <string name="live_cct_kelvin_label">Color Temperature</string>
-    <string name="live_cct_kelvin_value">%1$dK</string>
-    <string name="live_fx_title">Cinematic Practical FX</string>
-    <string name="live_fx_caption">Pre-programmed physical lighting effects for video shoots &amp; cameras</string>
+    <!-- Live tab header. live_device_mode joins the phone model (%1$s) and the array's mode (%2$s). -->
+    <string name="live_device_fallback">Pixel 11 Pro</string>
+    <string name="live_device_mode">%1$s · %2$s</string>
+    <string name="live_mode_testing">Testing · %1$s</string>
+    <string name="live_mode_active">Active · %1$s</string>
+    <string name="live_mode_standby">Standby</string>
+    <string name="live_master">Master</string>
+    <string name="live_stop_test">Stop test</string>
 
-    <!-- Real-Time Audio DSP Visualizer -->
-    <string name="live_audio_title">Real-Time Music &amp; Audio Visualizer</string>
-    <string name="live_audio_caption">Sub-20ms 8-band FFT acoustic visualizer driven by system audio</string>
-    <string name="live_audio_toggle_on">Visualizer active · Streaming audio spectrum</string>
-    <string name="live_audio_toggle_off">Tap to start music visualizer</string>
-    <string name="live_audio_sensitivity">Audio Sensitivity</string>
-    <string name="live_audio_permission_required">Audio permission needed for system capture</string>
-    <string name="live_audio_permission_grant">Grant Permission</string>
-
-    <!-- Spatial Sensor Fusion Visor Tap -->
-    <string name="live_tap_title">Visor Glass Double-Tap</string>
-    <string name="live_tap_subtitle_on">Double-tap camera visor while face-down to toggle fill-light</string>
-    <string name="live_tap_subtitle_off">Double-tap gesture disabled</string>
+    <!-- One line under the app name in the top bar, describing the open tab. -->
+    <string name="tab_subtitle_live">Visor and flashlight</string>
+    <string name="tab_subtitle_style">Patterns and colours</string>
+    <string name="tab_subtitle_apps">App, chat, and privacy rules</string>
+    <string name="tab_subtitle_setup">Connection and safety</string>
 
 </resources>

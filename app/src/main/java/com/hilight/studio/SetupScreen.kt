@@ -844,9 +844,12 @@ private fun EngineTransportHeroCard(
     active: Transport,
     onPostSelfTest: () -> Unit,
 ) {
+    // The same readiness test as the top bar, so the two never disagree about the renderer.
+    val connected = store.isRendererConnectedForUi(status)
+    val launchPreview = rememberPreviewLauncher(store)
     val onlineAccent = Color(0xFF4ADE80)
     val offlineAccent = MaterialTheme.colorScheme.tertiary
-    val orbColor = if (status.alive) onlineAccent else offlineAccent
+    val orbColor = if (connected) onlineAccent else offlineAccent
 
     PixelCard(tone = 2) {
         Row(
@@ -874,7 +877,7 @@ private fun EngineTransportHeroCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (status.alive) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber,
+                    imageVector = if (connected) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber,
                     contentDescription = null,
                     tint = orbColor,
                     modifier = Modifier.size(24.dp),
@@ -885,46 +888,41 @@ private fun EngineTransportHeroCard(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = if (status.alive) "HiLight Engine Connected" else "HiLight Engine Disconnected",
+                    text = stringResource(if (connected) R.string.setup_engine_connected else R.string.setup_engine_disconnected),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = if (status.alive) {
-                        "${stringResource(active.labelRes)} · PID ${status.pid} · ${status.ledCount} LEDs Ready"
+                    text = if (connected) {
+                        stringResource(R.string.setup_engine_connected_detail, stringResource(active.labelRes), status.pid, status.ledCount)
                     } else {
-                        "${stringResource(transport.labelRes)} · Select Root, Shizuku, or Wireless ADB below to start the hardware daemon"
+                        stringResource(R.string.setup_engine_disconnected_detail, stringResource(transport.labelRes))
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             LivePill(
-                text = if (status.alive) "ONLINE" else "OFFLINE",
-                ok = status.alive,
+                text = stringResource(if (connected) R.string.setup_engine_online else R.string.setup_engine_offline),
+                ok = connected,
             )
         }
 
-        if (status.alive) {
+        if (connected) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 FilledTonalButton(
                     onClick = {
-                        store.preview(
-                            pattern = Pattern.RAINBOW,
-                            color = 0xFFFFFFFF.toInt(),
-                            speedMs = 2000,
-                            brightness = 1f,
-                        )
+                        launchPreview(Pattern.RAINBOW, 0xFFFFFFFF.toInt(), 2000, 1f, 4_000)
                     },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Test 8-LED Array")
+                    ButtonLabel(stringResource(R.string.setup_engine_test_leds))
                 }
                 OutlinedButton(
                     onClick = onPostSelfTest,
@@ -936,7 +934,7 @@ private fun EngineTransportHeroCard(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Send Test Notification")
+                    ButtonLabel(stringResource(R.string.setup_test_button))
                 }
             }
         } else {
@@ -949,17 +947,17 @@ private fun EngineTransportHeroCard(
                 FilledTonalButton(onClick = store::retryRoot) {
                     Icon(Icons.Rounded.Security, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Retry Root")
+                    ButtonLabel(stringResource(R.string.setup_root_retry))
                 }
                 FilledTonalButton(onClick = { store.shizuku.refresh() }) {
                     Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Refresh Shizuku")
+                    ButtonLabel(stringResource(R.string.setup_engine_refresh_shizuku))
                 }
                 OutlinedButton(onClick = { copy(ctx, ADB_COMMAND, R.string.adb_copied) }) {
                     Icon(Icons.Rounded.Terminal, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Copy ADB Command")
+                    ButtonLabel(stringResource(R.string.setup_engine_copy_adb))
                 }
             }
         }

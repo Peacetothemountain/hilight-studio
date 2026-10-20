@@ -24,7 +24,7 @@
     <string name="setup_auto_off_body">常時点灯スタイルはこの時間が過ぎると自動でオフになります。アプリ別ルールはそのまま動作します。</string>
     <!-- "Hardware protection is always on: brightness eases down after 10s of unbroken light, and the
          array rests if it has been lit for more than half of the last 10 minutes." -->
-    <string name="setup_auto_off_protection">ハードウェア保護は常に有効です。10 秒続けて点灯すると明るさが徐々に下がり、直近 10 分のうち半分以上点灯していた場合は LED アレイが休止します。</string>
+    <string name="setup_auto_off_protection">ハードウェア保護は常に有効です。60 秒続けて点灯すると明るさが徐々に下がり、直近 10 分のうち 8 分以上点灯していた場合は LED アレイが休止します。</string>
     <!-- "Stay on for" -->
     <string name="setup_stay_on_for">点灯時間</string>
 
@@ -288,6 +288,24 @@
     <string name="setup_root_disconnected_body">root は利用できますが、ライトのレンダラーに接続されていません。root を再試行し、接続できない場合は LED 診断情報をコピーしてください。</string>
 
     <!-- Battery Fuel Gauge -->
-    <string name="setup_charging_gauge_title">充電バッテリーバイザーゲージ</string>
-    <string name="setup_charging_gauge_body">充電器接続時に8個のバイザーLEDで現在のバッテリー残量を表示します。</string>
+
+    <!-- Connection card at the top of Setup -->
+    <!-- "Renderer connected" -->
+    <string name="setup_engine_connected">レンダラー接続済み</string>
+    <!-- "Renderer not connected" -->
+    <string name="setup_engine_disconnected">レンダラー未接続</string>
+    <!-- "%1$s · PID %2$d · %3$d LEDs" -->
+    <string name="setup_engine_connected_detail">%1$s · PID %2$d · LED %3$d 個</string>
+    <!-- "%1$s · Start root, Shizuku, or ADB below." -->
+    <string name="setup_engine_disconnected_detail">%1$s · 下で root、Shizuku、ADB のいずれかを開始してください。</string>
+    <!-- "Online" -->
+    <string name="setup_engine_online">オンライン</string>
+    <!-- "Offline" -->
+    <string name="setup_engine_offline">オフライン</string>
+    <!-- "Test the LEDs" -->
+    <string name="setup_engine_test_leds">LED をテスト</string>
+    <!-- "Refresh Shizuku" -->
+    <string name="setup_engine_refresh_shizuku">Shizuku を再確認</string>
+    <!-- "Copy ADB command" -->
+    <string name="setup_engine_copy_adb">ADB コマンドをコピー</string>
 </resources>

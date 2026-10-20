@@ -64,72 +64,39 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
-/**
- * The Pixel-flavoured building blocks: tonal cards, springy presses, pill selectors and the little
- * animated status affordances the system UI uses.
- */
-
-import android.content.Context
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.selection.selectable
 import kotlin.math.abs
 
+// The Pixel-flavoured building blocks: tonal cards, springy presses, pill selectors and the little
+// animated status affordances the system UI uses.
+
 /**
- * Pixel-grade precision tactile feedback utilizing Android 17 / Pixel LRA actuators.
- * Provides crisp tactile clicks for switches, granular ticks for sliders,
- * and confirms for key activations.
+ * Haptic feedback through the view, so it follows the user's own touch-feedback setting.
+ *
+ * There is deliberately no direct-vibrator fallback: performHapticFeedback returning false usually
+ * means the user turned touch feedback off, and vibrating anyway would override that choice.
  */
 object PixelHaptics {
     fun click(view: View) {
-        if (!view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)) {
-            vibrateFallback(view, VibrationEffect.EFFECT_CLICK)
-        }
+        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
     }
 
     fun confirm(view: View) {
-        if (!view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)) {
-            vibrateFallback(view, VibrationEffect.EFFECT_CLICK)
-        }
+        view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
     }
 
     fun tick(view: View) {
-        if (!view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)) {
-            vibrateFallback(view, VibrationEffect.EFFECT_TICK)
-        }
+        view.performHapticFeedback(HapticFeedbackConstants.SEGMENT_TICK)
     }
 
     fun toggle(view: View, checked: Boolean) {
-        val constant = if (checked) HapticFeedbackConstants.TOGGLE_ON else HapticFeedbackConstants.TOGGLE_OFF
-        if (!view.performHapticFeedback(constant)) {
-            vibrateFallback(view, if (checked) VibrationEffect.EFFECT_CLICK else VibrationEffect.EFFECT_TICK)
-        }
-    }
-
-    fun heavy(view: View) {
-        if (!view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)) {
-            vibrateFallback(view, VibrationEffect.EFFECT_HEAVY_CLICK)
-        }
-    }
-
-    private fun vibrateFallback(view: View, effectId: Int) {
-        try {
-            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vm = view.context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vm?.defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                view.context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-            }
-            if (vibrator != null && vibrator.hasVibrator()) {
-                vibrator.vibrate(VibrationEffect.createPredefined(effectId))
-            }
-        } catch (_: Throwable) {}
+        view.performHapticFeedback(
+            if (checked) HapticFeedbackConstants.TOGGLE_ON else HapticFeedbackConstants.TOGGLE_OFF
+        )
     }
 }
 
@@ -696,7 +663,7 @@ fun <T> SegmentedSelector(
                     .weight(1f)
                     .clip(CircleShape)
                     .background(bg, CircleShape)
-                    .clickable(role = Role.RadioButton) {
+                    .selectable(selected = isSelected, role = Role.RadioButton) {
                         PixelHaptics.click(view)
                         onSelect(option)
                     }

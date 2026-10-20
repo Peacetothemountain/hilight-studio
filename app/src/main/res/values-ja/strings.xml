@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- "Quick Setup" -->
+    <string name="rules_quick_setup">クイック設定</string>
+    <!-- "Quick Settings Tile" -->
+    <string name="setup_qs_tile_title">クイック設定タイル</string>
+    <!-- "Add the HiLight tile to Quick Settings to switch the flashlight on and off from anywhere. Long-press it for brightness and colour." -->
+    <string name="setup_qs_tile_body">クイック設定パネルに HiLight タイルを追加すると、どこからでもライトをすばやくオン・オフできます。長押しで明るさと色を調整できます。</string>
+    <!-- "Add HiLight Tile to Quick Settings" -->
+    <string name="setup_qs_tile_button">クイック設定にタイルを追加</string>
+    <!-- "Tile added to Quick Settings." -->
+    <string name="setup_qs_tile_added">クイック設定にタイルを追加しました。</string>
+    <!-- "Tile is already in Quick Settings." -->
+    <string name="setup_qs_tile_already_added">タイルはすでにクイック設定にあります。</string>
+    <!-- "Quick Settings request opened." -->
+    <string name="setup_qs_tile_opened">クイック設定への追加画面を開きました。</string>
+    <!-- "Wireless Debugging & On-Device Setup" -->
+    <string name="setup_wireless_adb_title">ワイヤレス デバッグでの端末内セットアップ</string>
+    <!-- "Start HiLight from the phone itself with Wireless debugging and Shizuku, without a computer." -->
+    <string name="setup_wireless_adb_body">ワイヤレス デバッグと Shizuku を使うと、パソコンなしで端末だけから HiLight を開始できます。</string>
+    <!-- "Open Developer Options" -->
+    <string name="setup_wireless_adb_button">開発者向けオプションを開く</string>
+</resources>

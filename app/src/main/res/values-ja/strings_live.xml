@@ -116,10 +116,8 @@
     <string name="tile_no_renderer">未接続</string>
     <!-- "Off" — the array is dark, not the Off pattern selected -->
     <string name="tile_off">消灯</string>
-    <!-- "Resting" -->
-    <string name="tile_resting">休止中</string>
-    <!-- "Timed out" — what ran out is the auto-off timer, so the subtitle names it -->
-    <string name="tile_timed_out">自動オフ</string>
+    <!-- "On" — the flashlight is lit -->
+    <string name="tile_on">点灯</string>
 
     <!-- The colour picker. widget_colour is the heading it falls back to when a caller does not name
          the colour it is editing; %1$d in widget_percent is a percentage of full. Intensity is the
@@ -132,5 +130,78 @@
     <string name="widget_intensity">明度</string>
     <!-- "%1$d%%" -->
     <string name="widget_percent">%1$d%%</string>
+    <!-- "Reset colour" -->
+    <string name="widget_reset_colour">色をリセット</string>
+
+    <!-- The Live tab's flashlight card -->
+    <!-- "HiLight Flashlight" -->
+    <string name="live_flashlight_title">HiLight ライト</string>
+    <!-- "On · %1$d%%" -->
+    <string name="live_flashlight_subtitle_on">点灯 · %1$d%%</string>
+    <!-- "Off · Stays on for the Setup tab's auto-off time" -->
+    <string name="live_flashlight_subtitle_off">消灯 · 点灯時間は設定タブの自動オフに従います</string>
+
+    <!-- Flashlight controls shared by the Quick Settings dialog and the Live tab -->
+    <!-- "Flashlight Strength" -->
+    <string name="flashlight_dialog_title">ライトの明るさ</string>
+    <!-- "Off" -->
+    <string name="flashlight_level_off">オフ</string>
+    <!-- "%1$d%%" -->
+    <string name="flashlight_level_percent">%1$d%%</string>
+    <!-- "Flashlight" -->
+    <string name="flashlight_torch">ライト</string>
+    <!-- "Turn off" -->
+    <string name="flashlight_turn_off">オフにする</string>
+    <!-- "Done" -->
+    <string name="flashlight_done">完了</string>
+    <!-- "Colour wheel" -->
+    <string name="flashlight_color_wheel">カラーホイール</string>
+    <!-- "White" -->
+    <string name="flashlight_white">ホワイト</string>
+    <!-- "Spectrum" -->
+    <string name="flashlight_mode_spectrum">スペクトル</string>
+    <!-- "Temperature (K)" -->
+    <string name="flashlight_mode_temperature">色温度 (K)</string>
+    <!-- "%1$d K · %2$s" -->
+    <string name="flashlight_kelvin">%1$d K · %2$s</string>
+    <!-- "%1$dK" -->
+    <string name="flashlight_kelvin_preset">%1$dK</string>
+    <!-- The kelvin names follow the Japanese lamp colour classes where one fits. -->
+    <!-- "Candlelight" -->
+    <string name="flashlight_kelvin_candle">ろうそく色</string>
+    <!-- "Warm Incandescent" -->
+    <string name="flashlight_kelvin_warm">電球色</string>
+    <!-- "Neutral White" -->
+    <string name="flashlight_kelvin_neutral">白色</string>
+    <!-- "Crisp Daylight" -->
+    <string name="flashlight_kelvin_daylight">昼白色</string>
+    <!-- "Cool Sky" -->
+    <string name="flashlight_kelvin_cool">昼光色</string>
+
+    <!-- Live tab header -->
+    <!-- "Pixel 11 Pro" — product name -->
+    <string name="live_device_fallback">Pixel 11 Pro</string>
+    <!-- "%1$s · %2$s" -->
+    <string name="live_device_mode">%1$s · %2$s</string>
+    <!-- "Testing · %1$s" -->
+    <string name="live_mode_testing">テスト中 · %1$s</string>
+    <!-- "Active · %1$s" -->
+    <string name="live_mode_active">点灯中 · %1$s</string>
+    <!-- "Standby" -->
+    <string name="live_mode_standby">待機中</string>
+    <!-- "Master" — the switch that hands the array to HiLight -->
+    <string name="live_master">マスター</string>
+    <!-- "Stop test" -->
+    <string name="live_stop_test">テストを停止</string>
+
+    <!-- One line under the app name in the top bar, describing the open tab -->
+    <!-- "Visor and flashlight" -->
+    <string name="tab_subtitle_live">バイザーとライト</string>
+    <!-- "Patterns and colours" -->
+    <string name="tab_subtitle_style">パターンと色</string>
+    <!-- "App, chat, and privacy rules" -->
+    <string name="tab_subtitle_apps">アプリ・チャット・プライバシーのルール</string>
+    <!-- "Connection and safety" -->
+    <string name="tab_subtitle_setup">接続と安全</string>
 
 </resources>
