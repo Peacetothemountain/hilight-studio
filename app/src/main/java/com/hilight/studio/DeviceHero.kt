@@ -18,7 +18,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -115,7 +117,8 @@ fun DeviceHero(
     profile: DeviceProfile = rememberDeviceProfile(),
     heightDp: Int = 210,
 ) {
-    val frame = rememberLedFrame(pattern, cfg, active && profile.hasHiLight)
+    // Read inside the Canvas only, so a running pattern redraws the hero instead of recomposing it.
+    val frameState = rememberLedFrame(pattern, cfg, active && profile.hasHiLight)
     val bloom by animateFloatAsState(
         targetValue = if (active && profile.hasHiLight) 1f else 0f,
         animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow),
@@ -141,6 +144,7 @@ fun DeviceHero(
     ) {
         Canvas(Modifier.fillMaxWidth().height(heightDp.dp)) {
             if (size.width <= 0f || size.height <= 0f) return@Canvas
+            val frame = frameState.value
             // Stage studio backdrop with radial lighting
             drawRect(Stage)
             drawRect(
@@ -897,16 +901,16 @@ private fun isStaticPattern(pattern: Pattern, cfg: Ambient): Boolean =
  * screen matches what the LEDs are doing.
  */
 @Composable
-fun rememberLedFrame(pattern: Pattern, cfg: Ambient, active: Boolean = true): IntArray {
+fun rememberLedFrame(pattern: Pattern, cfg: Ambient, active: Boolean = true): State<IntArray> {
     val staticPattern = isStaticPattern(pattern, cfg)
     val initialFrame = remember(pattern, cfg, active, staticPattern) {
         if (!active) DARK_FRAME else Renderer.frame(pattern, 0L, cfg)
     }
     if (!active || staticPattern) {
-        return initialFrame
+        return rememberUpdatedState(initialFrame)
     }
     val owner = LocalLifecycleOwner.current
-    val frame by produceState(initialFrame, pattern, cfg, active, owner) {
+    return produceState(initialFrame, pattern, cfg, active, owner) {
         owner.repeatOnLifecycle(Lifecycle.State.STARTED) {
             val start = android.os.SystemClock.elapsedRealtime()
             while (true) {
@@ -915,7 +919,6 @@ fun rememberLedFrame(pattern: Pattern, cfg: Ambient, active: Boolean = true): In
             }
         }
     }
-    return frame
 }
 
 /** Compact strip used on rule cards: an abstraction of the array, one dot per addressable LED. */
@@ -927,7 +930,7 @@ fun LedStrip(
     active: Boolean = true,
     heightDp: Int = 40,
 ) {
-    val frame = rememberLedFrame(pattern, cfg, active)
+    val frameState = rememberLedFrame(pattern, cfg, active)
     val patternName = stringResource(pattern.labelRes)
     val label = if (active) stringResource(R.string.hero_strip_preview, patternName)
     else stringResource(R.string.hero_strip_off, patternName)
@@ -938,6 +941,7 @@ fun LedStrip(
             .semantics { contentDescription = label },
     ) {
         if (size.width <= 0f || size.height <= 0f) return@Canvas
+        val frame = frameState.value
         val n = frame.size
         val gap = size.width / (n * 3.2f)
         val d = (size.width - gap * (n - 1)) / n
@@ -976,7 +980,7 @@ fun HiLightDiffuserPreview(
     modifier: Modifier = Modifier,
     active: Boolean = true,
 ) {
-    val frame = rememberLedFrame(pattern, cfg, active)
+    val frameState = rememberLedFrame(pattern, cfg, active)
     val bloom by animateFloatAsState(
         targetValue = if (active) 1f else 0f,
         animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessLow),
@@ -997,6 +1001,7 @@ fun HiLightDiffuserPreview(
     ) {
         Canvas(Modifier.fillMaxSize()) {
             if (size.width <= 0f || size.height <= 0f) return@Canvas
+            val frame = frameState.value
             val w = size.width
             val h = size.height
             val barW = (w * 0.94f).coerceAtMost(360.dp.toPx())

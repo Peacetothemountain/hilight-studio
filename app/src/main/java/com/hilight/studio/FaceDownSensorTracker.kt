@@ -119,12 +119,17 @@ internal class FaceDownSensorTracker(
         fun hasSensor(context: Context): Boolean =
             findSensor(context.getSystemService(SensorManager::class.java)) != null
 
-        /** Prefer non-wake-up sensors so continuous gravity/accelerometer sampling does not prevent CPU sleep. */
+        /**
+         * Prefer wake-up sensors so a screen-off orientation change can reach the foreground service.
+         *
+         * Face-down rules matter most with the screen off. A non-wake-up sensor stops delivering once
+         * the CPU sleeps, the watchdog then reports STALE, and every face-down rule fails closed.
+         */
         private fun findSensor(manager: SensorManager?): Sensor? = manager?.let {
-            it.getDefaultSensor(Sensor.TYPE_GRAVITY, false)
-                ?: it.getDefaultSensor(Sensor.TYPE_ACCELEROMETER, false)
-                ?: it.getDefaultSensor(Sensor.TYPE_GRAVITY, true)
+            it.getDefaultSensor(Sensor.TYPE_GRAVITY, true)
                 ?: it.getDefaultSensor(Sensor.TYPE_ACCELEROMETER, true)
+                ?: it.getDefaultSensor(Sensor.TYPE_GRAVITY, false)
+                ?: it.getDefaultSensor(Sensor.TYPE_ACCELEROMETER, false)
         }
     }
 }

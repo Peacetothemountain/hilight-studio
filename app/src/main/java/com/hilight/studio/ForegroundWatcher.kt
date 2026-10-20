@@ -119,10 +119,11 @@ class ForegroundWatcher : Service() {
         faceDownTracker.stop()
         handler.removeCallbacksAndMessages(null)
         thread.quitSafely()
+        // Cleared unconditionally: a watcher killed while rules still want it must not leave an app's
+        // look held with nothing left to release it. A restarted watcher re-applies it within a poll.
         main.post {
-            val currentPlan = store.foregroundWatchPlan()
-            if (!currentPlan.trackForegroundApps) store.setForegroundOverride(null, null)
-            if (!currentPlan.trackFaceDown) store.updateFaceDownSensorState(FaceDownState.INACTIVE, 0L)
+            store.setForegroundOverride(null, null)
+            store.updateFaceDownSensorState(FaceDownState.INACTIVE, 0L)
         }
         super.onDestroy()
     }
@@ -239,7 +240,7 @@ class ForegroundWatcher : Service() {
         private const val EXTRA_FACE_DOWN = "trackFaceDown"
         private const val POLL_MS = 1000L
         private const val QUERY_OVERLAP_MS = 2_000L
-        private const val BOOTSTRAP_LOOKBACK_MS = 15 * 60_000L
+        private const val BOOTSTRAP_LOOKBACK_MS = 24 * 60 * 60_000L
 
         /** Starts or stops the watcher to match one authoritative work plan. */
         internal fun syncRunning(ctx: Context, plan: ForegroundWatchPlan): SyncResult {
