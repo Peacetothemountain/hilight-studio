@@ -44,6 +44,10 @@ internal fun rootStateAfterExactStopFailure(
     current: RootBackend.State,
 ): RootBackend.State = if (sourceOwner == "root") RootBackend.State.ERROR else current
 
+/** A fresh cached heartbeat also protects a live helper during a torn status-file read. */
+internal fun rootHeartbeatBlocksRecovery(status: HelperStatus): Boolean =
+    status.alive
+
 /** Direct root transport. The existing file bridge and AdbHelper remain the renderer. */
 class RootBackend(private val ctx: Context) : Backend {
 
@@ -93,11 +97,12 @@ class RootBackend(private val ctx: Context) : Backend {
             try {
                 if (_state.value == State.RUNNING) {
                     // An explicit retry may recover a lost renderer without force-closing the app.
-                    // A torn read or a returning heartbeat cancels recovery; AVAILABLE delegates
-                    // restart to Store's existing staged-idle and exact PID/instance stop fence.
+                    // A fresh or returning heartbeat cancels recovery. An expired cache plus a
+                    // persistently torn file must still allow Retry: AVAILABLE delegates restart
+                    // to Store's staged-idle and exact PID/instance stop fence, not straight to launch.
                     repeat(COLD_STATUS_SAMPLES) { sample ->
                         val current = status()
-                        if (current.alive || !current.identityResolved) return@Thread
+                        if (rootHeartbeatBlocksRecovery(current)) return@Thread
                         if (sample + 1 < COLD_STATUS_SAMPLES) {
                             Thread.sleep(COLD_STATUS_SAMPLE_INTERVAL_MS)
                         }
@@ -123,10 +128,10 @@ class RootBackend(private val ctx: Context) : Backend {
     /** Starts only after Store has staged an output-disabled state with [stagedRevision]. */
     fun ensureStarted(stagedRevision: Long, onComplete: (Boolean) -> Unit) {
         synchronized(this) {
-            if (starting) {
-                main.post { onComplete(false) }
-                return
-            }
+            // The start already in flight owns the outcome and reports it through its own
+            // callback. Reporting "not started" here would let Store route output elsewhere while
+            // a root renderer is still coming up.
+            if (starting) return
             starting = true
         }
         attempt = RootAttemptDiagnostics(RootStartupPhase.PERMISSION)

@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -119,12 +121,12 @@ class MainActivity : ComponentActivity() {
 private enum class Tab(
     @StringRes val labelRes: Int,
     val icon: ImageVector,
-    val subtitle: String,
+    @StringRes val subtitleRes: Int,
 ) {
-    LIVE(R.string.tab_live, Icons.Rounded.Lightbulb, "Live Visor & Flashlight Control"),
-    AMBIENT(R.string.tab_style, Icons.Rounded.Tune, "8-LED Style & Pattern Studio"),
-    APPS(R.string.tab_apps, Icons.Rounded.Apps, "App, Chat & Privacy Rules"),
-    SETUP(R.string.tab_setup, Icons.Rounded.DisplaySettings, "Engine, Transport & Guards"),
+    LIVE(R.string.tab_live, Icons.Rounded.Lightbulb, R.string.tab_subtitle_live),
+    AMBIENT(R.string.tab_style, Icons.Rounded.Tune, R.string.tab_subtitle_style),
+    APPS(R.string.tab_apps, Icons.Rounded.Apps, R.string.tab_subtitle_apps),
+    SETUP(R.string.tab_setup, Icons.Rounded.DisplaySettings, R.string.tab_subtitle_setup),
 }
 
 @Composable
@@ -270,7 +272,7 @@ private fun App(store: Store, startInSetup: Boolean = false) {
                         Spacer(Modifier.width(11.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                             Text(
-                                text = "HiLight Studio",
+                                text = stringResource(R.string.app_name),
                                 style = MaterialTheme.typography.titleLarge.copy(
                                     fontWeight = FontWeight.ExtraBold,
                                 ),
@@ -278,14 +280,14 @@ private fun App(store: Store, startInSetup: Boolean = false) {
                                 overflow = TextOverflow.Ellipsis,
                             )
                             AnimatedContent(
-                                targetState = tab.subtitle,
+                                targetState = tab.subtitleRes,
                                 transitionSpec = {
                                     fadeIn(tween(180)).togetherWith(fadeOut(tween(120)))
                                 },
                                 label = "tabSubtitle",
                             ) { sub ->
                                 Text(
-                                    text = sub,
+                                    text = stringResource(sub),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -325,6 +327,7 @@ private fun App(store: Store, startInSetup: Boolean = false) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .selectableGroup()
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -358,7 +361,7 @@ private fun App(store: Store, startInSetup: Boolean = false) {
                                     .weight(1f)
                                     .clip(CircleShape)
                                     .background(pillBg, CircleShape)
-                                    .clickable(role = Role.Tab) {
+                                    .selectable(selected = selected, role = Role.Tab) {
                                         if (tab != t) PixelHaptics.tick(view)
                                         tabIndex = t.ordinal
                                     }
@@ -424,8 +427,3 @@ private fun App(store: Store, startInSetup: Boolean = false) {
         }
     }
 }
-
-
-
-
-

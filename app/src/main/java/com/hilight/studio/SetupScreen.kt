@@ -47,11 +47,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.core.content.FileProvider
-import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.concurrent.atomic.AtomicBoolean
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -214,7 +209,7 @@ fun SetupScreen(store: Store) {
     var forgetting by remember { mutableStateOf(false) }
     var checkingForUpdates by remember { mutableStateOf(false) }
     var updateResult by remember { mutableStateOf<UpdateCheckResult?>(null) }
-    var downloadingUpdate by remember { mutableStateOf(isDownloadingApk.get()) }
+    var downloadingUpdate by remember { mutableStateOf(UpdateInstaller.isDownloading) }
     var selfTestCountdown by remember { mutableIntStateOf(0) }
     var selfTestWarning by remember { mutableStateOf<String?>(null) }
     var confirmingFaceDown by remember { mutableStateOf(false) }
@@ -640,7 +635,7 @@ fun SetupScreen(store: Store) {
                 if (available.release.apkUrl != null) {
                     Button(
                         onClick = {
-                            downloadAndInstallApk(ctx, available.release.apkUrl) { downloadingUpdate = it }
+                            UpdateInstaller.downloadAndInstall(ctx, available.release.apkUrl) { downloadingUpdate = it }
                         },
                         enabled = !downloadingUpdate,
                     ) {
@@ -849,9 +844,12 @@ private fun EngineTransportHeroCard(
     active: Transport,
     onPostSelfTest: () -> Unit,
 ) {
+    // The same readiness test as the top bar, so the two never disagree about the renderer.
+    val connected = store.isRendererConnectedForUi(status)
+    val launchPreview = rememberPreviewLauncher(store)
     val onlineAccent = Color(0xFF4ADE80)
     val offlineAccent = MaterialTheme.colorScheme.tertiary
-    val orbColor = if (status.alive) onlineAccent else offlineAccent
+    val orbColor = if (connected) onlineAccent else offlineAccent
 
     PixelCard(tone = 2) {
         Row(
@@ -879,7 +877,7 @@ private fun EngineTransportHeroCard(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = if (status.alive) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber,
+                    imageVector = if (connected) Icons.Rounded.CheckCircle else Icons.Rounded.WarningAmber,
                     contentDescription = null,
                     tint = orbColor,
                     modifier = Modifier.size(24.dp),
@@ -890,46 +888,41 @@ private fun EngineTransportHeroCard(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = if (status.alive) "HiLight Engine Connected" else "HiLight Engine Disconnected",
+                    text = stringResource(if (connected) R.string.setup_engine_connected else R.string.setup_engine_disconnected),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = if (status.alive) {
-                        "${stringResource(active.labelRes)} · PID ${status.pid} · ${status.ledCount} LEDs Ready"
+                    text = if (connected) {
+                        stringResource(R.string.setup_engine_connected_detail, stringResource(active.labelRes), status.pid, status.ledCount)
                     } else {
-                        "${stringResource(transport.labelRes)} · Select Root, Shizuku, or Wireless ADB below to start the hardware daemon"
+                        stringResource(R.string.setup_engine_disconnected_detail, stringResource(transport.labelRes))
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             LivePill(
-                text = if (status.alive) "ONLINE" else "OFFLINE",
-                ok = status.alive,
+                text = stringResource(if (connected) R.string.setup_engine_online else R.string.setup_engine_offline),
+                ok = connected,
             )
         }
 
-        if (status.alive) {
+        if (connected) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 FilledTonalButton(
                     onClick = {
-                        store.preview(
-                            pattern = Pattern.RAINBOW,
-                            color = 0xFFFFFFFF.toInt(),
-                            speedMs = 2000,
-                            brightness = 1f,
-                        )
+                        launchPreview(Pattern.RAINBOW, 0xFFFFFFFF.toInt(), 2000, 1f, 4_000)
                     },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Test 8-LED Array")
+                    ButtonLabel(stringResource(R.string.setup_engine_test_leds))
                 }
                 OutlinedButton(
                     onClick = onPostSelfTest,
@@ -941,7 +934,7 @@ private fun EngineTransportHeroCard(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Send Test Notification")
+                    ButtonLabel(stringResource(R.string.setup_test_button))
                 }
             }
         } else {
@@ -954,17 +947,17 @@ private fun EngineTransportHeroCard(
                 FilledTonalButton(onClick = store::retryRoot) {
                     Icon(Icons.Rounded.Security, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Retry Root")
+                    ButtonLabel(stringResource(R.string.setup_root_retry))
                 }
                 FilledTonalButton(onClick = { store.shizuku.refresh() }) {
                     Icon(Icons.Rounded.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Refresh Shizuku")
+                    ButtonLabel(stringResource(R.string.setup_engine_refresh_shizuku))
                 }
                 OutlinedButton(onClick = { copy(ctx, ADB_COMMAND, R.string.adb_copied) }) {
                     Icon(Icons.Rounded.Terminal, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    ButtonLabel("Copy ADB Command")
+                    ButtonLabel(stringResource(R.string.setup_engine_copy_adb))
                 }
             }
         }
@@ -1234,91 +1227,6 @@ private fun openExternalUrl(ctx: Context, pageUrl: String) {
     val uri = Uri.parse(pageUrl)
     runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
         .onFailure { Toast.makeText(ctx, R.string.setup_no_browser, Toast.LENGTH_SHORT).show() }
-}
-
-private const val MAX_APK_BYTES = 64L * 1024 * 1024
-private val isDownloadingApk = AtomicBoolean(false)
-
-private fun downloadAndInstallApk(ctx: Context, apkUrl: String, onProgress: (Boolean) -> Unit) {
-    if (!isDownloadingApk.compareAndSet(false, true)) return
-    val appCtx = ctx.applicationContext
-    onProgress(true)
-    Thread {
-        var apkFile: File? = null
-        try {
-            val url = URL(apkUrl)
-            require(url.protocol.equals("https", ignoreCase = true)) { "HTTPS required" }
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15_000
-                readTimeout = 60_000
-            }
-            try {
-                connection.connect()
-                require(connection.responseCode in 200..299) {
-                    "HTTP ${connection.responseCode}"
-                }
-
-                val updateDir = File(appCtx.cacheDir, "updates").apply { mkdirs() }
-                val targetFile = File(updateDir, "HiLightStudioUpdate.apk")
-                apkFile = targetFile
-                if (targetFile.exists()) targetFile.delete()
-
-                connection.inputStream.use { input ->
-                    targetFile.outputStream().use { output ->
-                        val buffer = ByteArray(8192)
-                        var total = 0L
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            total += read
-                            if (total > MAX_APK_BYTES) {
-                                throw IllegalStateException("APK exceeds maximum size")
-                            }
-                            output.write(buffer, 0, read)
-                        }
-                    }
-                }
-
-                val archiveInfo = appCtx.packageManager.getPackageArchiveInfo(
-                    targetFile.absolutePath,
-                    android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES,
-                )
-                if (archiveInfo == null || archiveInfo.packageName != appCtx.packageName) {
-                    targetFile.delete()
-                    throw SecurityException("APK package mismatch")
-                }
-
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    isDownloadingApk.set(false)
-                    onProgress(false)
-                    try {
-                        val uri = FileProvider.getUriForFile(
-                            appCtx,
-                            "${appCtx.packageName}.provider",
-                            targetFile,
-                        )
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, "application/vnd.android.package-archive")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        appCtx.startActivity(intent)
-                    } catch (e: Exception) {
-                        Toast.makeText(appCtx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            } finally {
-                connection.disconnect()
-            }
-        } catch (e: Exception) {
-            apkFile?.delete()
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                isDownloadingApk.set(false)
-                onProgress(false)
-                Toast.makeText(appCtx, R.string.setup_updates_download_failed, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }.start()
 }
 
 private fun postSelfTestNotification(ctx: Context) {

@@ -120,14 +120,14 @@ class GlyphPatternsTest {
     fun `kelvinToRgb with extreme inputs produces valid opaque ARGB colors`() {
         val inputs = listOf(0, -1000, 2000, 6500, 100_000)
         for (kelvin in inputs) {
-            val argb = TileDialogActivity.kelvinToRgb(kelvin)
+            val argb = kelvinToRgb(kelvin)
             assertEquals("Opaque alpha for kelvin=$kelvin", 0xFF, (argb ushr 24) and 0xFF)
             assertTrue(((argb ushr 16) and 0xFF) in 0..255)
             assertTrue(((argb ushr 8) and 0xFF) in 0..255)
             assertTrue((argb and 0xFF) in 0..255)
         }
-        assertEquals(TileDialogActivity.kelvinToRgb(1000), TileDialogActivity.kelvinToRgb(0))
-        assertEquals(TileDialogActivity.kelvinToRgb(1000), TileDialogActivity.kelvinToRgb(-1000))
-        assertEquals(TileDialogActivity.kelvinToRgb(40_000), TileDialogActivity.kelvinToRgb(100_000))
+        assertEquals(kelvinToRgb(1000), kelvinToRgb(0))
+        assertEquals(kelvinToRgb(1000), kelvinToRgb(-1000))
+        assertEquals(kelvinToRgb(40_000), kelvinToRgb(100_000))
     }
 }

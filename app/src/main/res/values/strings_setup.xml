@@ -20,7 +20,7 @@
          strings, so only the prose is here. -->
     <string name="setup_auto_off_title">Auto-off</string>
     <string name="setup_auto_off_body">The always-on look switches itself off after this. App rules still work.</string>
-    <string name="setup_auto_off_protection">Hardware protection is always on: brightness eases down after 10s of unbroken light, and the array rests if it has been lit for more than half of the last 10 minutes.</string>
+    <string name="setup_auto_off_protection">Hardware protection is always on: brightness eases down after 60s of unbroken light, and the array rests once it has been lit for 8 of the last 10 minutes.</string>
     <string name="setup_stay_on_for">Stay on for</string>
 
     <!-- The two-step warning shown before the array may stay lit for minutes at a time. The first
@@ -181,7 +181,17 @@
     <string name="setup_root_retry">Retry root</string>
 
     <!-- Battery Fuel Gauge -->
-    <string name="setup_charging_gauge_title">Charging battery visor gauge</string>
-    <string name="setup_charging_gauge_body">Illuminate the 8 visor LEDs to show current battery level when charger is connected.</string>
 
+
+    <!-- Connection card at the top of Setup. %1$s is a transport name (Root, Shizuku, ADB), %2$d the
+         renderer process id, and %3$d the number of LEDs it found. -->
+    <string name="setup_engine_connected">Renderer connected</string>
+    <string name="setup_engine_disconnected">Renderer not connected</string>
+    <string name="setup_engine_connected_detail">%1$s · PID %2$d · %3$d LEDs</string>
+    <string name="setup_engine_disconnected_detail">%1$s · Start root, Shizuku, or ADB below.</string>
+    <string name="setup_engine_online">Online</string>
+    <string name="setup_engine_offline">Offline</string>
+    <string name="setup_engine_test_leds">Test the LEDs</string>
+    <string name="setup_engine_refresh_shizuku">Refresh Shizuku</string>
+    <string name="setup_engine_copy_adb">Copy ADB command</string>
 </resources>

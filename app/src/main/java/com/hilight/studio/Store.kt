@@ -309,6 +309,17 @@ internal fun shouldCancelAlertOnScreenLifecycle(
     activeAlertOwner: String?,
 ): Boolean = !(flashlightActive && activeAlertOwner == Store.OWNER_FLASHLIGHT)
 
+/**
+ * Time left before the renderer's open-ended-alert cap turns the flashlight off.
+ *
+ * Never zero: a zero duration means "no expiry" to [Store.holdAlert], which is exactly the stale
+ * "On" state this mirror exists to prevent. A re-push past the deadline expires on the next tick.
+ */
+internal fun flashlightHoldRemainingMs(startedAtMs: Long, nowMs: Long, holdMs: Int): Int {
+    val elapsed = (nowMs - startedAtMs).coerceAtLeast(0L)
+    return (holdMs - elapsed).coerceIn(1L, holdMs.toLong().coerceAtLeast(1L)).toInt()
+}
+
 /** Matches an active alert owner against a requested cancellation owner, including call-rule prefix owners. */
 internal fun matchesOwnedAlert(
     activeOwner: String?,
@@ -317,13 +328,6 @@ internal fun matchesOwnedAlert(
     activeOwner == requestedOwner ||
         (requestedOwner == DeviceSignals.OWNER_CALL && activeOwner.startsWith("call:"))
     )
-
-/** Requires master toggle, legacy/UI gauge toggle, and both DeviceSignalSettings charging flags. */
-internal fun shouldTriggerChargingGauge(
-    masterEnabled: Boolean,
-    gaugeEnabled: Boolean,
-    settings: DeviceSignalSettings,
-): Boolean = masterEnabled && gaugeEnabled && settings.chargingEnabled && settings.chargingGauge
 
 /**
  * Single source of truth for the UI and the triggers, and the only thing that pushes to a [Backend].
@@ -433,10 +437,17 @@ class Store private constructor(private val app: Context) {
 
     private val _flashlightBrightness = MutableStateFlow(prefs.getFloat("flashlightBrightness", 1f))
     val flashlightBrightness: StateFlow<Float> = _flashlightBrightness.asStateFlow()
-    private val _chargingGaugeEnabled = MutableStateFlow(
-        prefs.getBoolean("signals.chargingGauge", prefs.getBoolean("chargingGaugeEnabled", false))
+
+    /** Last colour temperature picked, so the white button keeps it across launches. */
+    private val _flashlightKelvin = MutableStateFlow(
+        prefs.getInt("flashlightKelvin", FLASHLIGHT_DEFAULT_KELVIN)
+            .coerceIn(FLASHLIGHT_MIN_KELVIN, FLASHLIGHT_MAX_KELVIN)
     )
-    val chargingGaugeEnabled: StateFlow<Boolean> = _chargingGaugeEnabled.asStateFlow()
+    val flashlightKelvin: StateFlow<Int> = _flashlightKelvin.asStateFlow()
+
+    /** The white button's colour: pure white until a temperature is chosen, then that tone. */
+    private val _flashlightWhite = MutableStateFlow(prefs.getInt("flashlightWhite", 0xFFFFFFFF.toInt()))
+    val flashlightWhite: StateFlow<Int> = _flashlightWhite.asStateFlow()
 
     private val _presets = MutableStateFlow(loadPresets())
     val presets: StateFlow<List<Preset>> = _presets.asStateFlow()
@@ -606,9 +617,6 @@ class Store private constructor(private val app: Context) {
                         cachedBatteryPlugged = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
                         if (prevPct != batteryPct()) refreshSuppression()
                         return
-                    }
-                    if (i?.action == Intent.ACTION_POWER_CONNECTED) {
-                        triggerChargingGauge()
                     }
                     when (screenLifecycleAction(i?.action, activeAlertScreenOffGated)) {
                         ScreenLifecycleAction.ARM_AND_REFRESH ->
@@ -1685,7 +1693,15 @@ class Store private constructor(private val app: Context) {
         setFlashlight(!_flashlightActive.value)
     }
 
-    /** Controls the 8-LED HiLight Flashlight mode. */
+    /**
+     * Controls the 8-LED HiLight Flashlight mode.
+     *
+     * The flashlight is an open-ended alert, which the renderer caps at the auto-off window it saw
+     * when the alert id first arrived. Store mirrors that same deadline so the switch, the Quick
+     * Settings tile and the dialog turn off when the LEDs do, instead of claiming "On" over a dark
+     * array. Re-pushes for colour or brightness keep the id, so they neither restart the renderer's
+     * clock nor this one.
+     */
     fun setFlashlight(
         active: Boolean,
         color: Int = _flashlightColor.value,
@@ -1697,8 +1713,15 @@ class Store private constructor(private val app: Context) {
             val id = if (wasActive && flashlightAlertId > 0L) {
                 flashlightAlertId
             } else {
+                flashlightStartedAtMs = SystemClock.elapsedRealtime()
+                flashlightHoldMs = _ambientTimeoutMs.value
                 Bridge.nextAlertId().also { flashlightAlertId = it }
             }
+            val remaining = flashlightHoldRemainingMs(
+                startedAtMs = flashlightStartedAtMs,
+                nowMs = SystemClock.elapsedRealtime(),
+                holdMs = flashlightHoldMs,
+            )
             holdAlert(
                 alert = Bridge.alertJson(
                     id = id,
@@ -1709,7 +1732,8 @@ class Store private constructor(private val app: Context) {
                     brightness = brightness,
                     source = AlertSource.PREVIEW,
                 ),
-                durationMs = 0,
+                // App-side mirror of the renderer's cap; the document itself stays open-ended.
+                durationMs = remaining,
                 arm = !wasActive,
                 preview = Ambient(
                     pattern = Pattern.SOLID,
@@ -1734,67 +1758,62 @@ class Store private constructor(private val app: Context) {
 
     /** Sets the 8-LED Flashlight color and persists it. */
     fun setFlashlightColor(color: Int) {
+        if (_flashlightColor.value == color) return
         _flashlightColor.value = color
         prefs.edit().putInt("flashlightColor", color).apply()
-        if (_flashlightActive.value) {
-            setFlashlight(true, color = color, brightness = _flashlightBrightness.value)
+        if (_flashlightActive.value) scheduleFlashlightPush()
+    }
+
+    /** One flashlight slider position: any visible level turns it on at that level, zero turns it off. */
+    fun applyFlashlightLevel(level: Float) {
+        if (level > 0.01f) {
+            setFlashlightBrightness(level)
+            if (!_flashlightActive.value) setFlashlight(true)
+        } else {
+            setFlashlight(false)
         }
+    }
+
+    /** Picks a colour temperature: it becomes the white button's tone and the flashlight colour. */
+    fun setFlashlightKelvin(kelvin: Int) {
+        val k = kelvin.coerceIn(FLASHLIGHT_MIN_KELVIN, FLASHLIGHT_MAX_KELVIN)
+        val white = kelvinToRgb(k)
+        if (_flashlightKelvin.value != k || _flashlightWhite.value != white) {
+            _flashlightKelvin.value = k
+            _flashlightWhite.value = white
+            prefs.edit().putInt("flashlightKelvin", k).putInt("flashlightWhite", white).apply()
+        }
+        setFlashlightColor(white)
     }
 
     /** Sets the 8-LED Flashlight brightness level and persists it. */
     fun setFlashlightBrightness(brightness: Float) {
         val b = brightness.coerceIn(0.05f, 1f)
+        if (_flashlightBrightness.value == b) return
         _flashlightBrightness.value = b
         prefs.edit().putFloat("flashlightBrightness", b).apply()
-        if (_flashlightActive.value) {
-            setFlashlight(true, color = _flashlightColor.value, brightness = b)
-        }
+        if (_flashlightActive.value) scheduleFlashlightPush()
     }
 
-    fun setChargingGaugeEnabled(enabled: Boolean) {
-        _chargingGaugeEnabled.value = enabled
-        prefs.edit().putBoolean("chargingGaugeEnabled", enabled).apply()
-        deviceSignals.updateSettings { it.copy(chargingGauge = enabled) }
+    /**
+     * Coalesces slider and colour-wheel drags into at most one renderer push per frame.
+     *
+     * A drag reports far faster than the renderer's 33 ms frame, and every push is a binder call or
+     * a bridge-file rewrite. The pending push always reads the latest colour and brightness.
+     */
+    private fun scheduleFlashlightPush() {
+        if (flashlightPushPending) return
+        flashlightPushPending = true
+        main.postDelayed(flashlightPush, FLASHLIGHT_PUSH_INTERVAL_MS)
     }
 
-    /** Triggers the 8-LED charging battery fuel gauge on the visor for 4 seconds. */
-    fun triggerChargingGauge() {
-        if (!shouldTriggerChargingGauge(_enabled.value, _chargingGaugeEnabled.value, deviceSignals.settings.value)) return
-        if (guardState().alertSuppression() != null) return
-        if (_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT) return
-        if (activeAlert != null && activeAlertOwner != DeviceSignals.OWNER_CHARGING) return
-        val rawPct = actualBatteryPct()
-        val numLeds = ((rawPct * LED_COUNT) / 100).coerceIn(1, LED_COUNT)
-        val gaugeColors = IntArray(LED_COUNT) { i ->
-            if (i < numLeds) {
-                when {
-                    rawPct < 20 -> 0xFFFF3D00.toInt() // Red (< 20%)
-                    rawPct < 50 -> 0xFFFFD600.toInt() // Amber (20% - 50%)
-                    else -> 0xFF00E676.toInt()        // Emerald Green (> 50%)
-                }
-            } else {
-                0x00000000
-            }
-        }
-        val look = Ambient(
-            pattern = Pattern.CUSTOM,
-            perLed = gaugeColors.toList(),
-            brightness = 1.0f,
-        )
-        holdAlert(
-            alert = Bridge.lookAlertJson(
-                id = Bridge.nextAlertId(),
-                look = look,
-                durationMs = 4000,
-                source = AlertSource.NOTIFICATION,
-            ),
-            durationMs = 4000,
-            arm = false,
-            preview = null,
-            source = AlertSource.NOTIFICATION,
-            owner = DeviceSignals.OWNER_CHARGING,
-        )
+    private var flashlightPushPending = false
+    private val flashlightPush = Runnable {
+        flashlightPushPending = false
+        if (_flashlightActive.value && activeAlertOwner == OWNER_FLASHLIGHT) setFlashlight(true)
     }
+    private var flashlightStartedAtMs = 0L
+    private var flashlightHoldMs = Limits.AMBIENT_DEFAULT_MS
 
     private fun ensureBatteryCache() {
         if (cachedBatteryLevel >= 0 && cachedBatteryScale > 0) return
@@ -1803,13 +1822,6 @@ class Store private constructor(private val app: Context) {
         cachedBatteryLevel = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
         cachedBatteryScale = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
         cachedBatteryPlugged = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
-    }
-
-    fun actualBatteryPct(): Int {
-        ensureBatteryCache()
-        val level = cachedBatteryLevel
-        val scale = cachedBatteryScale
-        return if (level >= 0 && scale > 0) (level * 100 / scale) else 100
     }
 
     /** Battery level from the cached sticky broadcast. */
@@ -2204,6 +2216,10 @@ class Store private constructor(private val app: Context) {
                     pending.manualBlackClearRequestId,
                 )
             }
+            // Availability may have arrived while discovery owned routing. Re-evaluate through
+            // the normal callback so master/ownership fences still guard startup; a failed or
+            // denied attempt is not retried here.
+            if (root.state.value == RootBackend.State.AVAILABLE) root.onStateChanged?.invoke()
         }
         main.postDelayed(::sampleAgain, COLD_BRIDGE_DISCOVERY_INTERVAL_MS)
     }
@@ -3428,6 +3444,9 @@ class Store private constructor(private val app: Context) {
 
         /** How many peeks the inspector keeps — enough to cover the last minute of a busy phone. */
         private const val MAX_PEEKS = 30
+
+        /** One renderer frame; see [scheduleFlashlightPush]. */
+        private const val FLASHLIGHT_PUSH_INTERVAL_MS = 33L
 
         /** How long anything the listener learns may sit in memory before it is written. */
         private const val FLUSH_MS = 2_000L

@@ -63,7 +63,7 @@ fun DeviceSignalsSection(store: Store) {
         }
         if (settings.chargingEnabled) {
             ToggleRow(stringResource(R.string.device_signals_gauge), settings.chargingGauge) {
-                store.setChargingGaugeEnabled(it)
+                store.deviceSignals.updateSettings { s -> s.copy(chargingGauge = it) }
             }
             Caption(
                 stringResource(
@@ -71,17 +71,29 @@ fun DeviceSignalsSection(store: Store) {
                     else R.string.device_signals_charging_description
                 )
             )
-            SignalColorRow(
-                label = stringResource(R.string.device_signals_charging_color),
-                color = settings.chargingColor,
-                expanded = expandedPicker == "charging",
-                onToggleExpand = {
-                    expandedPicker = if (expandedPicker == "charging") null else "charging"
-                },
-                onColor = { color ->
-                    store.deviceSignals.updateSettings { it.copy(chargingColor = color) }
-                },
-            )
+            if (!settings.chargingGauge) {
+                Caption(stringResource(R.string.device_signals_charging_style))
+                PatternCarousel(
+                    selected = settings.chargingPattern,
+                    options = chargingPatterns,
+                    onSelect = { pattern ->
+                        store.deviceSignals.updateSettings { it.copy(chargingPattern = pattern) }
+                    },
+                )
+            }
+            if (settings.chargingGauge || settings.chargingPattern != Pattern.RAINBOW) {
+                SignalColorRow(
+                    label = stringResource(R.string.device_signals_charging_color),
+                    color = settings.chargingColor,
+                    expanded = expandedPicker == "charging",
+                    onToggleExpand = {
+                        expandedPicker = if (expandedPicker == "charging") null else "charging"
+                    },
+                    onColor = { color ->
+                        store.deviceSignals.updateSettings { it.copy(chargingColor = color) }
+                    },
+                )
+            }
             SignalColorRow(
                 label = stringResource(R.string.device_signals_charged_color),
                 color = settings.chargedColor,
@@ -95,8 +107,8 @@ fun DeviceSignalsSection(store: Store) {
             )
             PixelSlider(
                 label = stringResource(R.string.device_signals_full_percent, settings.fullPercent),
-                value = settings.fullPercent.toFloat().coerceIn(50f, 100f),
-                range = 50f..100f,
+                value = settings.fullPercent.toFloat().coerceIn(1f, 100f),
+                range = 1f..100f,
                 onChange = { percent ->
                     store.deviceSignals.updateSettings { it.copy(fullPercent = percent.roundToInt()) }
                 },

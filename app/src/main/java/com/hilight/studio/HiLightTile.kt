@@ -9,6 +9,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 class HiLightTile : TileService() {
@@ -18,15 +19,17 @@ class HiLightTile : TileService() {
 
     override fun onStartListening() {
         super.onStartListening()
+        // The status flow is only polled while the app is open; sample it once for this panel.
+        store.refreshStatus()
         render()
         listeningJob?.cancel()
         listeningJob = scope.launch {
             combine(
                 store.flashlightActive,
-                store.flashlightBrightness
-            ) { active, brightness ->
-                active to brightness
-            }.collect {
+                store.status,
+            ) { active, status ->
+                active to store.isRendererConnectedForUi(status)
+            }.distinctUntilChanged().collect {
                 render()
             }
         }
@@ -61,7 +64,14 @@ class HiLightTile : TileService() {
             if (on) R.drawable.ic_flashlight else R.drawable.ic_flashlight_off
         )
         tile.label = getString(R.string.tile_label)
-        tile.subtitle = if (on) "On" else "Off"
+        tile.subtitle = getString(
+            when {
+                on -> R.string.tile_on
+                // Turning the flashlight on would light nothing; say so instead of a plain "Off".
+                !store.isRendererConnectedForUi(store.status.value) -> R.string.tile_no_renderer
+                else -> R.string.tile_off
+            }
+        )
         tile.updateTile()
     }
 

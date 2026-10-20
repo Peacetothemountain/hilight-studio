@@ -74,6 +74,28 @@ internal fun retainedShizukuStatus(
 
 internal enum class ShizukuPeekAction { WAIT_FOR_CALLBACK, CREATE_ONCE, FENCE }
 
+/** Main-thread reconnect work is cancelled by a newer disconnect, handoff or bind intent. */
+internal class ShizukuReconnectQueue(private val post: (() -> Unit) -> Unit) {
+    private var generation = 0L
+    private var pending = false
+
+    fun cancel(): Boolean {
+        generation++
+        return pending.also { pending = false }
+    }
+
+    fun schedule(action: () -> Unit) {
+        val expected = ++generation
+        pending = true
+        post {
+            if (generation == expected) {
+                pending = false
+                action()
+            }
+        }
+    }
+}
+
 /** A create is authorized only by the first no-create peek proving that no service exists. */
 internal fun shizukuPeekAction(
     result: Int,
@@ -245,6 +267,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
     private val _state = MutableStateFlow(State.NOT_RUNNING)
     val state: StateFlow<State> = _state.asStateFlow()
     private val main = Handler(Looper.getMainLooper())
+    private val reconnect = ShizukuReconnectQueue { main.post(it) }
 
     @Volatile private var service: IHiLightService? = null
     /** Raw text from a failure. Comes from the framework, so it is not translated. */
@@ -583,6 +606,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
 
     /** Every create-capable bind is preceded by a no-create peek using this same connection. */
     private fun beginConnectionAttempt(keepOwnershipFence: Boolean) {
+        reconnect.cancel()
         if (!runCatching { Shizuku.pingBinder() }.getOrDefault(false)) {
             if (keepOwnershipFence) {
                 fenceUnknownConnection("Shizuku manager unavailable before replacement peek")
@@ -659,6 +683,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
     }
 
     private fun fenceUnknownConnection(reason: String) {
+        reconnect.cancel()
         cancelConnectionTimeouts()
         connectionAttemptActive = false
         peekAwaitingCallback = false
@@ -883,8 +908,21 @@ class ShizukuBackend(private val ctx: Context) : Backend {
     }
 
     fun unbind() {
+        val cancelledExitReconnect = reconnect.cancel()
         if (releaseTerminationBinder != null) return
         connectionRemovalTombstone = true
+        if (cancelledExitReconnect && !connectionAttemptActive && !peekAwaitingCallback &&
+            !peekReportedExisting && !createBindIssued && service == null &&
+            incompatibleService == null && quarantinedServices.isEmpty() &&
+            !untrackableCandidatePresent
+        ) {
+            // Only exact exit schedules a reconnect. No new peek/create has begun, so cancelling
+            // that intent must not turn its temporary replacement fence into unknown ownership.
+            _unresolvedIncompatibleRenderer.value = false
+            _state.value = State.NOT_RUNNING
+            onAvailabilityChanged?.invoke()
+            return
+        }
         val fenced = incompatibleService
         if (fenced != null) {
             startupRemovalPending = true
@@ -998,6 +1036,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
     }
 
     private fun handleManagerBinderDeath() {
+        reconnect.cancel()
         cancelConnectionTimeouts()
         connectionAttemptActive = false
 
@@ -1042,6 +1081,8 @@ class ShizukuBackend(private val ctx: Context) : Backend {
 
     private fun completeNormalServiceExit(binder: IBinder, exit: ShizukuServiceExit) {
         val shouldRebind = rebindAfterCompatibilityDisconnect && !startupRemovalPending
+        val shouldRefreshManager = managerDeathExitPending &&
+            !startupRemovalPending && !normalExitPending
         connectionRemovalTombstone = true
         clearConnectionAttemptState()
         main.removeCallbacks(compatibilityRemovalTimeout)
@@ -1073,7 +1114,15 @@ class ShizukuBackend(private val ctx: Context) : Backend {
         // Notify Store with the dead process identity even when an in-transport replacement follows.
         // The unresolved fence stays raised until that replacement itself validates as current.
         notifyConfirmedNormalExit(exit)
-        if (shouldRebind) main.post { beginConnectionAttempt(keepOwnershipFence = true) }
+        if (shouldRebind || shouldRefreshManager) reconnect.schedule {
+            if (startupRemovalPending || service != null || incompatibleService != null ||
+                releaseTerminationBinder != null || quarantinedServices.isNotEmpty() ||
+                untrackableCandidatePresent
+            ) return@schedule
+            // This exit set the tombstone itself; a later Disconnect cancels this queued intent.
+            // Re-check manager availability after exact exit: its arrival may have been fenced.
+            if (shouldRebind) beginConnectionAttempt(keepOwnershipFence = true) else refresh()
+        }
     }
 
     private fun notifyConfirmedNormalExit(exit: ShizukuServiceExit) {
@@ -1196,6 +1245,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
             main.post { onComplete(false) }
             return
         }
+        reconnect.cancel()
         service?.let { trackServiceBinder(it) }
         pending = null
         connectionRemovalTombstone = true
@@ -1237,6 +1287,7 @@ class ShizukuBackend(private val ctx: Context) : Backend {
             main.post { onComplete(false) }
             return
         }
+        reconnect.cancel()
         service?.let { trackServiceBinder(it) }
         pending = null
         connectionRemovalTombstone = true

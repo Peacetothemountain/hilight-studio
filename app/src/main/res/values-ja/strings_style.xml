@@ -106,4 +106,29 @@
     <!-- "Export presets" — title the system share sheet is given -->
     <string name="style_export_chooser">プリセットを書き出す</string>
 
+
+    <!-- Style studio header -->
+    <!-- "Visor style" -->
+    <string name="style_studio_title">バイザーのスタイル</string>
+    <!-- "%1$s · %2$d%%" -->
+    <string name="style_studio_badge">%1$s · %2$d%%</string>
+    <!-- "Test on visor" -->
+    <string name="style_test_on_visor">バイザーでテスト</string>
+    <!-- "Steady light across the whole visor." -->
+    <string name="style_caption_solid">バイザー全体を一定の明るさで点灯します。</string>
+    <!-- "A smooth two-colour blend across all eight LEDs." -->
+    <string name="style_caption_gradient">8 個の LED 全体に 2 色をなめらかにつなぎます。</string>
+    <!-- "Random hues drifting across the array." -->
+    <string name="style_caption_random">LED アレイ全体で色がランダムに移り変わります。</string>
+    <!-- Hex colour entry dialog -->
+    <!-- "Hex colour" -->
+    <string name="widget_hex">16 進カラーコード</string>
+    <!-- "Reset to white" -->
+    <string name="widget_reset_white">白に戻す</string>
+    <!-- "Sunset" -->
+    <string name="style_gradient_sunset">夕焼け</string>
+    <!-- "Cyber" -->
+    <string name="style_gradient_cyber">サイバー</string>
+    <!-- "Swap" — exchanges the start and end colours -->
+    <string name="style_gradient_swap">入れ替え</string>
 </resources>

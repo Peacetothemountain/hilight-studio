@@ -330,29 +330,6 @@ class StoreLifecycleRecoveryTest {
     }
 
     @Test
-    fun `shouldTriggerChargingGauge requires master toggle gauge toggle and both charging signal flags`() {
-        val allOn = DeviceSignalSettings(chargingEnabled = true, chargingGauge = true)
-        assertTrue(shouldTriggerChargingGauge(masterEnabled = true, gaugeEnabled = true, settings = allOn))
-
-        assertFalse(shouldTriggerChargingGauge(masterEnabled = false, gaugeEnabled = true, settings = allOn))
-        assertFalse(shouldTriggerChargingGauge(masterEnabled = true, gaugeEnabled = false, settings = allOn))
-        assertFalse(
-            shouldTriggerChargingGauge(
-                masterEnabled = true,
-                gaugeEnabled = true,
-                settings = allOn.copy(chargingEnabled = false),
-            )
-        )
-        assertFalse(
-            shouldTriggerChargingGauge(
-                masterEnabled = true,
-                gaugeEnabled = true,
-                settings = allOn.copy(chargingGauge = false),
-            )
-        )
-    }
-
-    @Test
     fun `shouldCancelAlertOnScreenLifecycle preserves active flashlight across unlock and screen wake`() {
         assertFalse(
             shouldCancelAlertOnScreenLifecycle(

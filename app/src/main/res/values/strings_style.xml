@@ -75,4 +75,20 @@
     <!-- Title the system share sheet is given when presets are exported -->
     <string name="style_export_chooser">Export presets</string>
 
+
+    <!-- Style studio header. style_studio_badge joins a pattern name (%1$s) and its brightness
+         percentage (%2$d). -->
+    <string name="style_studio_title">Visor style</string>
+    <string name="style_studio_badge">%1$s · %2$d%%</string>
+    <string name="style_test_on_visor">Test on visor</string>
+    <string name="style_caption_solid">Steady light across the whole visor.</string>
+    <string name="style_caption_gradient">A smooth two-colour blend across all eight LEDs.</string>
+    <string name="style_caption_random">Random hues drifting across the array.</string>
+    <!-- Hex colour entry dialog. -->
+    <string name="widget_hex">Hex colour</string>
+    <string name="widget_reset_white">Reset to white</string>
+    <!-- Two-colour gradient shortcuts: two named palettes, and swapping the ends. -->
+    <string name="style_gradient_sunset">Sunset</string>
+    <string name="style_gradient_cyber">Cyber</string>
+    <string name="style_gradient_swap">Swap</string>
 </resources>

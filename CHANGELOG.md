@@ -2,6 +2,24 @@
 
 All notable changes to HiLight Studio are documented here.
 
+## Unreleased
+
+- In-app updates now verify the downloaded APK's package, version and signing certificate before the installer appears.
+- The flashlight switch, Quick Settings tile and dialog turn off when the LEDs do at the auto-off time, instead of showing "On" over a dark array. The tile shows "No renderer" when nothing can light.
+- Face-down rules work with the screen off again, and leaving an app no longer risks its colour staying on if the background watcher is stopped.
+- Plugging in shows one charging signal instead of two.
+- The tile dialog, Live tab and every colour picker share one set of colour controls; the chosen colour temperature is remembered. Their animations no longer re-lay-out the screen every frame.
+- Touch feedback follows the system setting. Switches, tabs and the flashlight slider work better with TalkBack.
+- All new screens are translated into Japanese, and the hardware-protection text matches the limits actually enforced.
+
+## 1.0.18-rc.1 — 2026-10-06
+
+- Added charging styles including heartbeat, pulse and rainbow in Setup → Device signals. Existing blinking defaults, charged color, battery gauge and brief display limits are preserved.
+- Fixed Shizuku recovery when its manager returns before the previous renderer finishes exiting. Disconnect now cancels queued reconnects without leaving an unnecessary reconnection block.
+- Improved root recovery from unreadable cached status and previous-boot heartbeats, and restored root startup when availability arrives during initial renderer discovery.
+- Existing rules, settings and renderer ownership safeguards remain intact. These recovery changes need affected-device confirmation; the reported KernelSU cleanup timeout is not confirmed resolved.
+- Experimental GitHub release; the separate Play edition is intended for Open testing.
+
 ## 1.0.15-rc.1 — 2026-09-20
 
 - Release candidate for GitHub, version code 17; not a confirmed fix for the KernelSU reports.

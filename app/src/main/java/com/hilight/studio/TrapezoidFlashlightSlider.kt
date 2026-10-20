@@ -23,6 +23,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
@@ -72,11 +78,21 @@ fun TrapezoidFlashlightSlider(
     val totalHeightDp = trackLengthDp + torchIconSizeDp + 16.dp
     val restingBarColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f)
     val torchTintOff = MaterialTheme.colorScheme.onSurfaceVariant
+    val levelDescription = stringResource(R.string.flashlight_level_percent, (value.coerceIn(0f, 1f) * 100).roundToInt())
 
     Box(
         modifier = modifier
             .width(maxTrackWidthDp + 40.dp)
             .height(totalHeightDp)
+            // Exposes the beam as an adjustable control to TalkBack and switch access.
+            .semantics(mergeDescendants = true) {
+                progressBarRangeInfo = ProgressBarRangeInfo(value.coerceIn(0f, 1f), 0f..1f, steps = 9)
+                stateDescription = levelDescription
+                setProgress { target ->
+                    currentOnValueChange(target.coerceIn(0f, 1f))
+                    true
+                }
+            }
             .pointerInput(Unit) {
                 detectDragGestures { change, _ ->
                     change.consume()
@@ -192,7 +208,7 @@ fun TrapezoidFlashlightSlider(
             painter = painterResource(
                 if (value > 0.01f) R.drawable.ic_flashlight_torch else R.drawable.ic_flashlight_torch_off
             ),
-            contentDescription = "Flashlight Torch",
+            contentDescription = stringResource(R.string.flashlight_torch),
             tint = if (value > 0.01f) MaterialTheme.colorScheme.onSurface else torchTintOff,
             modifier = Modifier
                 .size(torchIconSizeDp)
