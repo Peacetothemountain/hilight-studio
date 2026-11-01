@@ -22,8 +22,10 @@ fun signingValue(key: String, env: String): String? =
 
 android {
     namespace = "com.hilight.studio"
-    // Match the F-Droid build recipe even when a newer Android 37 minor SDK is installed locally.
-    compileSdk { version = release(37) { minorApiLevel = 0 } }
+    // Compose UI 1.13 (mesh gradients and progressive blur, below) requires compiling against 37.1,
+    // the lowest minor that satisfies it. compileSdk changes no runtime behaviour (minSdk and
+    // targetSdk stay at 37), but the F-Droid build recipe must install platform 37.1 to match.
+    compileSdk { version = release(37) { minorApiLevel = 1 } }
 
     defaultConfig {
         applicationId = "com.hilight.studio"
@@ -106,8 +108,12 @@ kotlin {
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.08.00"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
+    // Pinned past the BOM for the graphics previewed alongside Android 18 at Android Dev Summit
+    // 2026: MeshGradientPainter (multi-point mesh gradients, hardware Mesh path on API 34+) and the
+    // BlurRadiusSpec progressive blur for Modifier.blur (spatially-varying radii on API 33+). Both
+    // first ship in Compose UI 1.13; drop these two pins once the BOM catches up.
+    implementation("androidx.compose.ui:ui:1.13.0-beta02")
+    implementation("androidx.compose.ui:ui-graphics:1.13.0-beta02")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.13.0")

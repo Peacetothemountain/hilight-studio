@@ -13,7 +13,7 @@ Pro XL, and Pro Fold on Android 17.
 
 ## Building from source
 
-Use Android Studio with Android SDK platform 37.0 and JDK 21. Run
+Use Android Studio with Android SDK platform 37.1 and JDK 21. Run
 `./gradlew :app:testDebugUnitTest :app:build :app:lint` for a local build, or see
 [docs/RELEASING.md](docs/RELEASING.md) for the maintainer release process.
 

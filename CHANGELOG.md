@@ -4,6 +4,13 @@ All notable changes to HiLight Studio are documented here.
 
 ## Unreleased
 
+- Android 18-style graphics, using the mesh gradient and progressive blur APIs previewed with Android 18 at Android Dev Summit 2026 (Compose UI 1.13):
+  - The light around the HiLight preview on Live is now a mesh gradient fed by all eight LED colours, so chases and rainbows visibly travel around the halo and across the back of the phone instead of blending into one colour.
+  - The Live preview has a tilt-shift depth of field: the camera bar stays sharp while the rest of the phone falls out of focus.
+  - Tab content softens into the top and bottom edges while there is more to scroll, instead of being cut off.
+  - All three can be turned off under Setup → Appearance → Light and depth effects.
+  - Builds now compile against Android SDK platform 37.1, which Compose UI 1.13 requires. minSdk and targetSdk are unchanged at 37.
+
 - In-app updates now verify the downloaded APK's package, version and signing certificate before the installer appears.
 - The flashlight switch, Quick Settings tile and dialog turn off when the LEDs do at the auto-off time, instead of showing "On" over a dark array. The tile shows "No renderer" when nothing can light.
 - Face-down rules work with the screen off again, and leaving an app no longer risks its colour staying on if the background watcher is stopped.

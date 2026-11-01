@@ -178,6 +178,7 @@ fun SetupScreen(store: Store) {
     val rootState by store.root.state.collectAsStateWithLifecycle()
     val priority by store.priority.collectAsStateWithLifecycle()
     val dynamicColor by store.dynamicColor.collectAsStateWithLifecycle()
+    val depthEffects by store.depthEffects.collectAsStateWithLifecycle()
     val timeoutMs by store.ambientTimeoutMs.collectAsStateWithLifecycle()
     val quietEnabled by store.quietEnabled.collectAsStateWithLifecycle()
     val quietStart by store.quietStart.collectAsStateWithLifecycle()
@@ -598,6 +599,10 @@ fun SetupScreen(store: Store) {
         ToggleRow(stringResource(R.string.setup_wallpaper_colours), dynamicColor) {
             store.setDynamicColor(it)
         }
+        ToggleRow(stringResource(R.string.setup_depth_effects), depthEffects) {
+            store.setDepthEffects(it)
+        }
+        Caption(stringResource(R.string.setup_depth_effects_body))
     }
 
     PixelCard {

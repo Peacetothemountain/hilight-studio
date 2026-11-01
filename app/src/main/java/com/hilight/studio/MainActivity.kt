@@ -53,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -89,8 +90,11 @@ class MainActivity : ComponentActivity() {
         val store = Store.get(this)
         setContent {
             val dynamic by store.dynamicColor.collectAsStateWithLifecycle()
+            val depth by store.depthEffects.collectAsStateWithLifecycle()
             HiLightTheme(dynamicColor = dynamic) {
-                App(store, startInSetup = intent?.action == OPEN_SETUP_ACTION)
+                CompositionLocalProvider(LocalDepthEffects provides depth) {
+                    App(store, startInSetup = intent?.action == OPEN_SETUP_ACTION)
+                }
             }
         }
     }
@@ -411,10 +415,13 @@ private fun App(store: Store, startInSetup: Boolean = false) {
             label = "tab",
             modifier = Modifier.padding(pad),
         ) { current ->
+            // One scroll state per tab instance, read by the edge blur's layer block (no recomposition).
+            val scroll = rememberScrollState()
             Column(
                 Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState()),
+                    .scrollEdgeBlur(scroll, enabled = LocalDepthEffects.current)
+                    .verticalScroll(scroll),
             ) {
                 when (current) {
                     Tab.LIVE -> LiveScreen(store)

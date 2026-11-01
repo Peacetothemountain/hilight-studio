@@ -360,6 +360,10 @@ class Store private constructor(private val app: Context) {
     private val _dynamicColor = MutableStateFlow(prefs.getBoolean("dynamicColor", true))
     val dynamicColor: StateFlow<Boolean> = _dynamicColor.asStateFlow()
 
+    /** Mesh-gradient light and progressive blur in the UI (DepthEffects.kt). Purely visual. */
+    private val _depthEffects = MutableStateFlow(prefs.getBoolean("depthEffects", true))
+    val depthEffects: StateFlow<Boolean> = _depthEffects.asStateFlow()
+
     private val _enabled = MutableStateFlow(prefs.getBoolean("enabled", false))
     val enabled: StateFlow<Boolean> = _enabled.asStateFlow()
 
@@ -869,6 +873,11 @@ class Store private constructor(private val app: Context) {
     fun setDynamicColor(v: Boolean) {
         _dynamicColor.value = v
         prefs.edit().putBoolean("dynamicColor", v).apply()
+    }
+
+    fun setDepthEffects(v: Boolean) {
+        _depthEffects.value = v
+        prefs.edit().putBoolean("depthEffects", v).apply()
     }
 
     fun setAmbientTimeoutMs(v: Int) {

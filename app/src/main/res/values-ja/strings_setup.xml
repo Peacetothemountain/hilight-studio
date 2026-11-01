@@ -201,6 +201,10 @@
     <string name="setup_appearance_title">外観</string>
     <!-- "Wallpaper colours" -->
     <string name="setup_wallpaper_colours">壁紙の色</string>
+    <!-- "Light and depth effects" -->
+    <string name="setup_depth_effects">光と奥行きのエフェクト</string>
+    <!-- "Live colour mesh around the HiLight preview, depth of field on the phone, and soft edges while scrolling. Turn off for flat visuals and lower GPU use." -->
+    <string name="setup_depth_effects_body">HiLight プレビューの周りに広がるライブカラーメッシュ、本体の被写界深度、スクロール時のやわらかな端を表示します。オフにするとフラットな表示になり、GPU の負荷が下がります。</string>
 
     <!-- Manual GitHub update check -->
     <!-- "Updates" -->

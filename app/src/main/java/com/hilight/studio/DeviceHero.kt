@@ -116,6 +116,8 @@ fun DeviceHero(
     modifier: Modifier = Modifier,
     profile: DeviceProfile = rememberDeviceProfile(),
     heightDp: Int = 210,
+    /** Android 18-style mesh light and depth of field; see DepthEffects.kt. */
+    depthEffects: Boolean = LocalDepthEffects.current,
 ) {
     // Read inside the Canvas only, so a running pattern redraws the hero instead of recomposing it.
     val frameState = rememberLedFrame(pattern, cfg, active && profile.hasHiLight)
@@ -125,6 +127,7 @@ fun DeviceHero(
         label = "bloom",
     )
     val clipPathObj = remember { Path() }
+    val lightField = remember { LedLightField() }
 
     // Assembled before the modifier chain because a semantics block is not a composable scope
     val modelName = profile.labelRes?.let { stringResource(it) } ?: profile.label
@@ -142,7 +145,12 @@ fun DeviceHero(
             .clip(RoundedCornerShape(28.dp))
             .semantics { contentDescription = description },
     ) {
-        Canvas(Modifier.fillMaxWidth().height(heightDp.dp)) {
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(heightDp.dp)
+                .heroDepthOfField(profile, enabled = depthEffects),
+        ) {
             if (size.width <= 0f || size.height <= 0f) return@Canvas
             val frame = frameState.value
             // Stage studio backdrop with radial lighting
@@ -156,14 +164,24 @@ fun DeviceHero(
             )
 
             // Centered phone shell with visible outer body and chassis
-            val phoneW = size.width * (if (profile.foldStyle) 0.94f else 0.84f)
-            val phoneH = size.height * 1.5f
-            val left = (size.width - phoneW) / 2f
-            val top = size.height * 0.10f
-            val corner = phoneW * (if (profile.foldStyle) 0.08f else 0.14f)
+            val geometry = heroGeometry(size, profile)
+            val phoneW = geometry.phoneW
+            val phoneH = geometry.phoneH
+            val left = geometry.left
+            val top = geometry.top
+            val corner = geometry.corner
 
-            if (bloom > 0.01f) drawSpill(frame, left, top, phoneW, bloom)
+            if (bloom > 0.01f) {
+                if (depthEffects) {
+                    with(lightField) { drawHalo(frame, geometry, bloom) }
+                } else {
+                    drawSpill(frame, left, top, phoneW, bloom)
+                }
+            }
             drawBody(left, top, phoneW, phoneH, corner)
+            if (depthEffects && bloom > 0.01f) {
+                with(lightField) { drawBodyWash(frame, geometry, bloom) }
+            }
 
             if (profile.foldStyle) {
                 drawFoldCameraBlock(frame, left, top, phoneW, phoneH, bloom, clipPathObj)

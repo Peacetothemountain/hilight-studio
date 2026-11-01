@@ -190,7 +190,7 @@ Per-contact rules read the sender's name from the notification itself, so they n
 Requirements:
 
 - JDK 21
-- Android SDK platform 37.0
+- Android SDK platform 37.1
 - Android Studio or a command-line Android SDK installation
 
 ```bash
